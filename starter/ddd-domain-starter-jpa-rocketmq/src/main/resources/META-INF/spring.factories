@@ -1,0 +1,3 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  org.ddd.domain.aggregate.JpaAggregateAutoConfiguration,\
+  org.ddd.domain.event.RocketMqEventAutoConfiguration
