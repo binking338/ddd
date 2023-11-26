@@ -7,6 +7,8 @@ import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 请使用 PageData.create 静态方法创建实例
@@ -95,6 +97,17 @@ public class PageData<T> {
         pageData.pageNum = pageNum;
         pageData.totalCount = totalCount;
         pageData.list = list;
+        return pageData;
+    }
+
+    /**
+     * 转换分页结果类型
+     *
+     * @param <D>
+     * @return
+     */
+    public <D> PageData<D> transform(Function<T, D> map) {
+        PageData<D> pageData = create(pageSize, pageNum, totalCount, getList().stream().map(map).collect(Collectors.toList()));
         return pageData;
     }
 }
