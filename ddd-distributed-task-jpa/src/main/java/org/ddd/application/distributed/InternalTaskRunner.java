@@ -3,6 +3,7 @@ package org.ddd.application.distributed;
 import lombok.RequiredArgsConstructor;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
+import org.springframework.util.SystemPropertyUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -11,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+import static org.ddd.share.Constants.CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE;
 
 /**
  * @author qiaohe
@@ -21,7 +24,7 @@ public class InternalTaskRunner {
     private final TaskRecordJpaRepository taskRecordJpaRepository;
     private final List<Task> tasks;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
+    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE)));
     private Map<Class, Task> taskMap = null;
 
     private Task resolveTask(Class<?> taskClass) {

@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import static org.ddd.share.Constants.CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE;
 import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 
 /**
@@ -35,7 +36,7 @@ public class EventScheduleService {
     private final DomainEventPublisher domainEventPublisher;
     private final EventRecordImplJpaRepository eventRecordImplJpaRepository;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
+    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE)));
 
     private String svcName = null;
 
