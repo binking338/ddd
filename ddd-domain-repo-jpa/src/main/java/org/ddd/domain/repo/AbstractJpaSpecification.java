@@ -1,4 +1,4 @@
-package org.ddd.domain.aggregate;
+package org.ddd.domain.repo;
 
 /**
  * @author qiaohe

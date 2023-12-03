@@ -1,4 +1,4 @@
-package org.ddd.domain.aggregate;
+package org.ddd.domain.repo;
 
 import lombok.RequiredArgsConstructor;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
@@ -19,7 +19,7 @@ import java.util.List;
 @Configuration
 @ConditionalOnBean(RocketMQTemplate.class)
 @RequiredArgsConstructor
-public class JpaAggregateAutoConfiguration {
+public class JpaRepositoryAutoConfiguration {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final DomainEventSupervisor domainEventSupervisor;
     private final DomainEventPublisher domainEventPublisher;

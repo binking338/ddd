@@ -13,7 +13,7 @@
         <module>ddd-core</module>
         <module>ddd-domain-event-rocketmq</module>
         <module>ddd-domain-event-rocketmq-jpa</module>
-        <module>ddd-domain-aggregate-jpa</module>
+        <module>ddd-domain-repo-jpa</module>
         <module>ddd-distributed-locker-jdbc</module>
         <module>ddd-distributed-saga-jpa</module>
         <module>ddd-distributed-task-jpa</module>

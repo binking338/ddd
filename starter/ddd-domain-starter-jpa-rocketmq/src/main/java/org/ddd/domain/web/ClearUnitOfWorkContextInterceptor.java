@@ -1,7 +1,7 @@
 package org.ddd.domain.web;
 
 import lombok.RequiredArgsConstructor;
-import org.ddd.domain.aggregate.UnitOfWork;
+import org.ddd.domain.repo.UnitOfWork;
 import org.ddd.domain.event.DomainEventSupervisor;
 import org.springframework.web.servlet.HandlerInterceptor;
 

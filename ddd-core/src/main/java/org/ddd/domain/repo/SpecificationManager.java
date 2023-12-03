@@ -1,4 +1,4 @@
-package org.ddd.domain.aggregate;
+package org.ddd.domain.repo;
 
 /**
  * 实体规格约束管理器

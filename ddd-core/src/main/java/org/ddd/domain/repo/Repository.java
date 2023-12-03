@@ -1,4 +1,4 @@
-package org.ddd.domain.aggregate;
+package org.ddd.domain.repo;
 
 import org.ddd.share.PageData;
 import org.ddd.share.ListOrder;

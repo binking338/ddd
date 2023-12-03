@@ -25,7 +25,7 @@
         </dependency>
         <dependency>
             <groupId>org.ddd</groupId>
-            <artifactId>ddd-domain-aggregate-jpa</artifactId>
+            <artifactId>ddd-domain-repo-jpa</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>

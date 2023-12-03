@@ -7,10 +7,10 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>ddd-domain-aggregate-jpa</artifactId>
+    <artifactId>ddd-domain-repo-jpa</artifactId>
     <packaging>jar</packaging>
 
-    <name>ddd-domain-aggregate-jpa</name>
+    <name>ddd-domain-repo-jpa</name>
 
     <dependencies>
         <dependency>

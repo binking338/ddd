@@ -1,4 +1,4 @@
-package org.ddd.domain.aggregate;
+package org.ddd.domain.repo;
 
 import org.springframework.transaction.annotation.Propagation;
 
