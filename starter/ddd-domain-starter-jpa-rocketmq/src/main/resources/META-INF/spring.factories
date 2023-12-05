@@ -1,3 +1,4 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
   org.ddd.domain.repo.JpaRepositoryAutoConfiguration,\
-  org.ddd.domain.event.RocketMqEventAutoConfiguration
+  org.ddd.domain.event.RocketMqEventAutoConfiguration,\
+  org.ddd.domain.web.ClearDomainContextInterceptor

@@ -1,6 +1,7 @@
 package org.ddd.application.distributed;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,7 +16,8 @@ public class JdbcLockerAutoConfiguration {
     private final JdbcTemplate jdbcTemplate;
 
     @Bean
-    public JdbcLocker jdbcLocker(){
+    @ConditionalOnMissingBean(value = Locker.class)
+    public JdbcLocker jdbcLocker() {
         JdbcLocker jdbcLocker = new JdbcLocker(jdbcTemplate);
         return jdbcLocker;
     }
