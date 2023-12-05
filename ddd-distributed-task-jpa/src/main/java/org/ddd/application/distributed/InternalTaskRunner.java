@@ -1,6 +1,8 @@
 package org.ddd.application.distributed;
 
+import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.util.SystemPropertyUtils;
@@ -20,6 +22,7 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THR
  * @date 2023/8/19
  */
 @RequiredArgsConstructor
+@Slf4j
 public class InternalTaskRunner {
     private final TaskRecordJpaRepository taskRecordJpaRepository;
     private final List<Task> tasks;
@@ -39,6 +42,7 @@ public class InternalTaskRunner {
 
     public void run(TaskRecord taskRecord, Duration delay) {
         executor.schedule(() -> {
+            log.info("正在执行异步任务: %s", JSON.toJSONString(taskRecord));
             Task task = resolveTask(taskRecord.getTaskClass());
             Object result = null;
             try {
@@ -46,8 +50,10 @@ public class InternalTaskRunner {
                 task.onSuccess(taskRecord.getParam(), result);
                 taskRecord.confirmedCompeleted(result, LocalDateTime.now());
                 taskRecordJpaRepository.save(taskRecord);
+                log.info("结束执行异步任务: id=%s", taskRecord.getId());
             } catch (Exception ex) {
                 task.onFail(taskRecord.getParam(), ex);
+                log.error("异步任务执行异常", ex);
             }
             return result;
         }, delay.getSeconds(), TimeUnit.SECONDS);

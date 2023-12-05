@@ -1,5 +1,6 @@
 package org.ddd.application.distributed;
 
+import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -91,6 +92,7 @@ public class TaskScheduleService {
                         continue;
                     }
                     for (TaskRecord taskRecord : tasks.getContent()) {
+                        log.info("异步任务补偿: %s", JSON.toJSONString(taskRecord));
                         LocalDateTime nextTryTime = taskRecord.getNextTryTime();
                         taskRecord.beginRun(nextTryTime);
                         taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);

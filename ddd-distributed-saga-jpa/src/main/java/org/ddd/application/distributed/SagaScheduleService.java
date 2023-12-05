@@ -1,5 +1,6 @@
 package org.ddd.application.distributed;
 
+import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -104,6 +105,7 @@ public class SagaScheduleService {
                         continue;
                     }
                     for (Saga saga : sagas.toList()) {
+                        log.info("SAGA事务补偿: %s", JSON.toJSONString(saga));
                         LocalDateTime nextTryTime = saga.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {
@@ -178,6 +180,7 @@ public class SagaScheduleService {
                     }
 
                     for (Saga saga : sagas.toList()) {
+                        log.info("SAGA事务回滚补偿: %s", JSON.toJSONString(saga));
                         LocalDateTime nextTryTime = saga.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {
