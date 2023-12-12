@@ -1,6 +1,7 @@
 package org.ddd.application.distributed;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.util.SystemPropertyUtils;
@@ -29,20 +30,26 @@ public class JpaTaskSupervisor implements TaskSupervisor {
     }
 
     @Override
-    public <Param, Result> void run(Class<Task<Param, Result>> taskClass, Param param, java.time.Duration expire, int retryTimes) {
+    public <Param, Result> void run(String uuid, Class<Task<Param, Result>> taskClass, Param param, java.time.Duration expire, int retryTimes) {
+        if(StringUtils.isNotBlank(uuid)){
+            // TODO 检查是否有相同uuid的任务存在，如果已经成功执行，不重复执行
+        }
         TaskRecord taskRecord = new TaskRecord();
-        taskRecord.init(taskClass, param, getSvcName(), LocalDateTime.now(), expire, retryTimes);
+        taskRecord.init(uuid, taskClass, param, getSvcName(), LocalDateTime.now(), expire, retryTimes);
         taskRecord.beginRun(LocalDateTime.now());
         taskRecord = taskRecordJpaRepository.save(taskRecord);
         internalTaskRunner.run(taskRecord, Duration.ZERO);
     }
 
     @Override
-    public <Param, Result> void delay(Class<Task<Param, Result>> taskClass, Param param, Duration delay, java.time.Duration expire, int retryTimes) {
+    public <Param, Result> void delay(String uuid, Class<Task<Param, Result>> taskClass, Param param, Duration delay, java.time.Duration expire, int retryTimes) {
+        if(StringUtils.isNotBlank(uuid)){
+            // TODO 检查是否有相同uuid的任务存在，如果已经成功执行，不重复执行
+        }
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime schedule = now.plusSeconds(delay.getSeconds());
         TaskRecord taskRecord = new TaskRecord();
-        taskRecord.init(taskClass, param, getSvcName(), schedule, expire, retryTimes);
+        taskRecord.init(uuid, taskClass, param, getSvcName(), schedule, expire, retryTimes);
         if (delay.getSeconds() < 60) {
             taskRecord.beginRun(schedule);
             taskRecord = taskRecordJpaRepository.save(taskRecord);

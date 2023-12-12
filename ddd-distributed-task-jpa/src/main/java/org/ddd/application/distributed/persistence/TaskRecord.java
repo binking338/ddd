@@ -15,6 +15,7 @@ import javax.persistence.*;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * @author qiaohe
@@ -33,6 +34,7 @@ import java.util.Date;
 public class TaskRecord {
     public static final String F_SVC_NAME = "svcName";
     public static final String F_TASK_TYPE = "taskType";
+    public static final String F_TASK_UUID = "taskUuid";
     public static final String F_DATA = "data";
     public static final String F_DATA_TYPE = "dataType";
     public static final String F_RESULT = "result";
@@ -45,8 +47,11 @@ public class TaskRecord {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void init(Class<?> taskClass, Object param, String svcName, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
+    public void init(String uuid, Class<?> taskClass, Object param, String svcName, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
         this.svcName = svcName;
+        this.taskUuid = StringUtils.isNotBlank(uuid)
+                ? uuid
+                : UUID.randomUUID().toString();
         this.taskType = taskClass.getName();
         this.createAt = schedule;
         this.expireAt = schedule.plusSeconds((int) expireAfter.getSeconds());
@@ -176,21 +181,28 @@ public class TaskRecord {
 
     /**
      * 任务类型
-     * varchar(100)
+     * varchar(255)
      */
     @Column(name = "`task_type`")
     private String taskType;
 
     /**
+     * 任务uuid
+     * varchar(64)
+     */
+    @Column(name = "`task_uuid`")
+    private String taskUuid;
+
+    /**
      * 任务数据
-     * varchar(1000)
+     * text
      */
     @Column(name = "`data`")
     private String data;
 
     /**
      * 任务数据类型
-     * varchar(200)
+     * varchar(255)
      */
     @Column(name = "`data_type`")
     private String dataType;
@@ -204,7 +216,7 @@ public class TaskRecord {
 
     /**
      * 任务结果类型
-     * varchar(200)
+     * varchar(255)
      */
     @Column(name = "`result_type`")
     private String resultType;

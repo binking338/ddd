@@ -7,15 +7,17 @@ package org.ddd.application.distributed;
 public interface TaskSupervisor {
     /**
      * 即时任务
+     * @param uuid
      * @param taskClass
      * @param param
      * @param <Param>
      * @param <Result>
      */
-    <Param, Result> void run(Class<Task<Param, Result>> taskClass, Param param, java.time.Duration expire, int retryTimes);
+    <Param, Result> void run(String uuid, Class<Task<Param, Result>> taskClass, Param param, java.time.Duration expire, int retryTimes);
 
     /**
      * 延时任务
+     * @param uuid
      * @param taskClass
      * @param param
      * @param delay
@@ -24,6 +26,6 @@ public interface TaskSupervisor {
      * @param <Param>
      * @param <Result>
      */
-    <Param, Result> void delay(Class<Task<Param, Result>> taskClass, Param param, java.time.Duration delay, java.time.Duration expire, int retryTimes);
+    <Param, Result> void delay(String uuid, Class<Task<Param, Result>> taskClass, Param param, java.time.Duration delay, java.time.Duration expire, int retryTimes);
 
 }

@@ -8,6 +8,7 @@ CREATE TABLE `__locker` (
                             `db_created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `db_updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  COMMENT '更新时间',
                             PRIMARY KEY (`id`),
-                            KEY `idx_created_at` (`db_created_at`),
-                            KEY `idx_updated_at` (`db_updated_at`)
+                            UNIQUE KEY `uniq_name` (`name`),
+                            KEY `idx_db_created_at` (`db_created_at`),
+                            KEY `idx_db_updated_at` (`db_updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='锁\n@I;';

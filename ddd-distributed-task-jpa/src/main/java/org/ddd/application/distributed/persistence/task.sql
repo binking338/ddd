@@ -1,7 +1,8 @@
 CREATE TABLE `__task` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                          `task_type` int(11) NOT NULL DEFAULT '0',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
+                          `task_type` varchar(255) NOT NULL DEFAULT '',
+                          `task_uuid` varchar(64) NOT NULL DEFAULT '',
                           `data` text,
                           `data_type` varchar(255) NOT NULL DEFAULT '',
                           `result` text,
@@ -20,8 +21,10 @@ CREATE TABLE `__task` (
                                        `id`
                               -- , `db_created_at`
                               ),
-                          KEY `idx_created_at` (`db_created_at`),
-                          KEY `idx_updated_at` (`db_updated_at`)
+                          UNIQUE KEY `uniq_task_uuid` (`task_uuid`),
+                          KEY `idx_next_try_time` (`next_try_time`,`task_state`,`svc_name`,`task_type`),
+                          KEY `idx_db_created_at` (`db_created_at`),
+                          KEY `idx_db_updated_at` (`db_updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='延时任务\n@I;'
 -- partition by range(to_days(db_created_at))
 -- (partition p202201 values less than (to_days('2022-02-01')) ENGINE=InnoDB)
