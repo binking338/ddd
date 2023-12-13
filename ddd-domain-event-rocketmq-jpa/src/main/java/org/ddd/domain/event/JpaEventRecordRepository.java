@@ -1,9 +1,9 @@
 package org.ddd.domain.event;
 
-
 import lombok.RequiredArgsConstructor;
+import org.ddd.domain.event.persistence.Event;
+import org.ddd.domain.event.persistence.EventJpaRepository;
 import org.ddd.domain.event.persistence.EventRecordImpl;
-import org.ddd.domain.event.persistence.EventRecordImplJpaRepository;
 
 /**
  * @author qiaohe
@@ -11,7 +11,7 @@ import org.ddd.domain.event.persistence.EventRecordImplJpaRepository;
  */
 @RequiredArgsConstructor
 public class JpaEventRecordRepository implements EventRecordRepository {
-    private final EventRecordImplJpaRepository eventRecordImplJpaRepository;
+    private final EventJpaRepository eventJpaRepository;
 
     @Override
     public EventRecord create() {
@@ -19,7 +19,8 @@ public class JpaEventRecordRepository implements EventRecordRepository {
     }
 
     @Override
-    public EventRecord save(EventRecord event) {
-        return eventRecordImplJpaRepository.saveAndFlush(((EventRecordImpl) event));
+    public void save(EventRecord eventRecord) {
+        Event event = eventJpaRepository.saveAndFlush(((EventRecordImpl) eventRecord).getEvent());
+        ((EventRecordImpl) eventRecord).resume(event);
     }
 }

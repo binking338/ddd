@@ -6,5 +6,5 @@ package  org.ddd.domain.event;
  */
 public interface EventRecordRepository {
     public EventRecord create();
-    public EventRecord save(EventRecord event);
+    public void save(EventRecord event);
 }

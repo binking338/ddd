@@ -56,7 +56,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             // todo: 去除魔法数字
             event.init(eventPayload, svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
             event.beginDelivery(LocalDateTime.now());
-            event = eventRecordRepository.save(event);
+            eventRecordRepository.save(event);
         }
         try {
             String destination = event.getEventType();
@@ -89,7 +89,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             }
             try {
                 LocalDateTime now = LocalDateTime.now();
-                event.comfirmedDelivered(now);
+                event.confirmedDelivered(now);
                 eventRecordRepository.save(event);
                 log.info(String.format("集成事件发送成功, destination=%s, body=%s", event.getEventType(), JSON.toJSONString(event.getPayload())));
             } catch (Exception ex) {

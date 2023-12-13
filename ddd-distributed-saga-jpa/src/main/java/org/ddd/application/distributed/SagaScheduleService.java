@@ -4,19 +4,27 @@ import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.time.DateFormatUtils;
+import org.apache.commons.lang3.time.DateUtils;
+import org.ddd.application.distributed.persistence.ArchivedSaga;
+import org.ddd.application.distributed.persistence.ArchivedSagaJpaRepository;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.ddd.application.distributed.persistence.Saga;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.SystemPropertyUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.ddd.share.Constants.CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE;
 import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
@@ -25,14 +33,15 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
  * @author <template/>
  * @date
  */
-@Service
 @RequiredArgsConstructor
 @Slf4j
 public class SagaScheduleService {
     private static final String KEY_COMPENSATION_LOCKER = "saga_compensation[" + CONFIG_KEY_4_SVC_NAME + "]";
     private static final String KEY_ROLLBACK_LOCKER = "saga_rollback[" + CONFIG_KEY_4_SVC_NAME + "]";
+    private static final String KEY_ARCHIVE_LOCKER = "saga_archive[" + CONFIG_KEY_4_SVC_NAME + "]";
 
     private final SagaJpaRepository sagaJpaRepository;
+    private final ArchivedSagaJpaRepository archivedSagaJpaRepository;
     private final SagaSupervisor sagaSupervisor;
     private final Locker locker;
 
@@ -207,6 +216,114 @@ public class SagaScheduleService {
             }
         } catch (InterruptedException e) {
             /* ignore */
+        }
+    }
+
+    private String archiveLockerKey = null;
+
+    private String getArchiveLockerKey() {
+        if (archiveLockerKey == null) {
+            archiveLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_ARCHIVE_LOCKER);
+        }
+        return archiveLockerKey;
+    }
+    /**
+     * SAGA事务归档
+     */
+    public void archive(int expireDays, int batchSize, Duration maxLockDuration) {
+        String pwd = RandomStringUtils.random(8, true, true);
+        String svcName = getSvcName();
+        String lockerKey = getArchiveLockerKey();
+
+        if (!locker.acquire(lockerKey, pwd, maxLockDuration)) {
+            return;
+        }
+        log.info("SAGA事务归档");
+
+        Date now = new Date();
+        while (true) {
+            try {
+                Page<Saga> sagas = sagaJpaRepository.findAll((root, cq, cb) -> {
+                    cq.where(
+                            cb.and(
+                                    // 【状态】
+                                    cb.or(
+                                            cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.CANCEL),
+                                            cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.EXPIRED),
+                                            cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.FAILED),
+                                            cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.ROLLBACKED),
+                                            cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.DONE)
+                                    ),
+                                    cb.lessThan(root.get(Saga.F_EXPIRE_AT), DateUtils.addDays(now, expireDays)))
+                    );
+                    return null;
+                }, PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, Saga.F_CREATE_AT)));
+                if (!sagas.hasContent()) {
+                    break;
+                }
+                List<ArchivedSaga> archivedSagas = sagas.stream().map(s -> ArchivedSaga.builder()
+                        .id(s.getId())
+                        .svcName(s.getSvcName())
+                        .bizType(s.getBizType())
+                        .contextDataType(s.getContextDataType())
+                        .contextData(s.getContextData())
+                        .sagaState(s.getSagaState())
+                        .createAt(s.getCreateAt())
+                        .expireAt(s.getExpireAt())
+                        .nextTryTime(s.getNextTryTime())
+                        .lastTryTime(s.getLastTryTime())
+                        .tryTimes(s.getTryTimes())
+                        .triedTimes(s.getTriedTimes())
+                        .version(s.getVersion())
+                        .processes(s.getProcesses().stream().map(p -> ArchivedSaga.SagaProcess.builder()
+                                .id(p.getId())
+                                .processCode(p.getProcessCode())
+                                .processName(p.getProcessName())
+                                .processState(p.getProcessState())
+                                .contextData(p.getContextData())
+                                .exception(p.getException())
+                                .lastTryTime(p.getLastTryTime())
+                                .triedTimes(p.getTriedTimes())
+                                .createAt(p.getCreateAt())
+                                .build()).collect(Collectors.toList()))
+                        .build()
+                ).collect(Collectors.toList());
+                migrate(sagas.toList(), archivedSagas);
+            } catch (Exception ex) {
+                log.error("Saga事务归档:异常失败", ex);
+            }
+        }
+        locker.release(lockerKey, pwd);
+    }
+    @Transactional
+    public void migrate(List<Saga> sagas, List<ArchivedSaga> archivedSagas) {
+        archivedSagaJpaRepository.saveAll(archivedSagas);
+        sagaJpaRepository.deleteInBatch(sagas);
+    }
+
+    public void addPartition() {
+        Date now = new Date();
+        addPartition("__saga", DateUtils.addMonths(now, 1));
+        addPartition("__saga_process", DateUtils.addMonths(now, 1));
+        addPartition("__archived_saga", DateUtils.addMonths(now, 1));
+        addPartition("__archived_saga_process", DateUtils.addMonths(now, 1));
+    }
+
+    private final JdbcTemplate jdbcTemplate;
+
+    /**
+     * 创建date日期所在月下个月的分区
+     * @param table
+     * @param date
+     */
+    private void addPartition(String table, Date date) {
+        String sql = "alter table `" + table + "` add partition (partition p" + DateFormatUtils.format(date, "yyyyMM") + " values less than (to_days('" + DateFormatUtils.format(DateUtils.addMonths(date, 1), "yyyy-MM") + "-01')) ENGINE=InnoDB)";
+        try {
+            jdbcTemplate.execute(sql);
+        } catch (Exception ex) {
+            if (!ex.getMessage().contains("Duplicate partition")) {
+                log.error("分区创建异常 table = " + table + " partition = p" + DateFormatUtils.format(date, "yyyyMM"), ex);
+            }
         }
     }
 }

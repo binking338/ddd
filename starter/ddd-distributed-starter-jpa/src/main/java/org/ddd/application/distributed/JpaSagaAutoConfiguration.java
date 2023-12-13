@@ -1,15 +1,18 @@
 package org.ddd.application.distributed;
 
 import lombok.RequiredArgsConstructor;
+import org.ddd.application.distributed.persistence.ArchivedSagaJpaRepository;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.List;
 
@@ -27,7 +30,9 @@ import static org.ddd.share.Constants.*;
 public class JpaSagaAutoConfiguration {
     private final List<SagaStateMachine> sagaStateMachines;
     private final SagaJpaRepository sagaJpaRepository;
+    private final ArchivedSagaJpaRepository archivedSagaJpaRepository;
     private final Locker locker;
+    private final JdbcTemplate jdbcTemplate;
 
     @Bean
     public SagaSupervisor sagaSupervisor() {
@@ -37,7 +42,8 @@ public class JpaSagaAutoConfiguration {
 
     @Bean
     public SagaScheduleService sagaScheduleService(SagaSupervisor sagaSupervisor) {
-        scheduleService = new SagaScheduleService(sagaJpaRepository, sagaSupervisor, locker);
+        scheduleService = new SagaScheduleService(sagaJpaRepository,archivedSagaJpaRepository, sagaSupervisor, locker, jdbcTemplate);
+        scheduleService.addPartition();
         return scheduleService;
     }
 
@@ -61,5 +67,24 @@ public class JpaSagaAutoConfiguration {
     public void rollback() {
         if (scheduleService == null) return;
         scheduleService.rollback(batchSize, maxConcurrency, Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(maxLockSeconds));
+    }
+
+    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_BATCHSIZE)
+    private int archiveBatchSize;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_EXPIREDAYS)
+    private int archiveExpireDays;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_MAXLOCKSECONDS)
+    private int archiveMaxLockSeconds;
+
+
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_CRON)
+    public void archive() {
+        if (scheduleService == null) return;
+        scheduleService.archive(archiveExpireDays, archiveBatchSize, Duration.ofSeconds(archiveMaxLockSeconds));
+    }
+
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ADDPARTITION_CRON)
+    public void addTablePartition(){
+        scheduleService.addPartition();
     }
 }

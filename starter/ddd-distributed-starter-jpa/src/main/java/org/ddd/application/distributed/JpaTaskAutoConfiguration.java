@@ -1,10 +1,12 @@
 package org.ddd.application.distributed;
 
 import lombok.RequiredArgsConstructor;
+import org.ddd.application.distributed.persistence.ArchivedTaskRecordJpaRepository;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -22,8 +24,10 @@ import static org.ddd.share.Constants.*;
 @EnableScheduling
 public class JpaTaskAutoConfiguration {
     private final TaskRecordJpaRepository taskRecordJpaRepository;
+    private final ArchivedTaskRecordJpaRepository archivedTaskRecordJpaRepository;
     private final List<Task> tasks;
     private final Locker locker;
+    private final JdbcTemplate jdbcTemplate;
 
     @Bean
     public InternalTaskRunner internalTaskRunner(){
@@ -39,7 +43,8 @@ public class JpaTaskAutoConfiguration {
 
     @Bean
     public TaskScheduleService taskScheduleService(InternalTaskRunner taskRunner){
-        scheduleService = new TaskScheduleService(locker, taskRecordJpaRepository, taskRunner);
+        scheduleService = new TaskScheduleService(locker, taskRecordJpaRepository, archivedTaskRecordJpaRepository, taskRunner, jdbcTemplate);
+        scheduleService.addPartition();
         return scheduleService;
     }
 
@@ -56,6 +61,23 @@ public class JpaTaskAutoConfiguration {
     public void compensation(){
         if(scheduleService == null) return;
         scheduleService.compensation(batchSize, maxConcurrency, Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(maxLockSeconds));
+    }
+
+    @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_BATCHSIZE)
+    private int archiveBatchSize;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_EXPIREDAYS)
+    private int archiveExpireDays;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_MAXLOCKSECONDS)
+    private int archiveMaxLockSeconds;
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_CRON)
+    public void archive() {
+        if (scheduleService == null) return;
+        scheduleService.archive(archiveExpireDays, archiveBatchSize, Duration.ofSeconds(archiveMaxLockSeconds));
+    }
+
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ADDPARTITION_CRON)
+    public void addTablePartition(){
+        scheduleService.addPartition();
     }
 
 }

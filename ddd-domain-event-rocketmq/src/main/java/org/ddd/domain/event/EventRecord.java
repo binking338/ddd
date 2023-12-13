@@ -29,7 +29,7 @@ public interface EventRecord {
      * 确认时间已发出
      * @param now
      */
-    void comfirmedDelivered(LocalDateTime now);
+    void confirmedDelivered(LocalDateTime now);
 
     /**
      * 获取事件类型

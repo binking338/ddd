@@ -1,4 +1,5 @@
-package org.ddd.application.distributed.persistence;
+package org.ddd.domain.event.persistence;
+
 
 import com.alibaba.fastjson.JSON;
 import lombok.AllArgsConstructor;
@@ -7,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.ddd.domain.event.annotation.DomainEvent;
 import org.ddd.share.annotation.Retry;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -16,14 +18,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
- * @author qiaohe
- * @date 2023/8/28
+ * @author <template/>
+ * @date
  */
 @Entity
-@Table(name = "`__task`")
+@Table(name = "`__event`")
 @DynamicInsert
 @DynamicUpdate
 
@@ -32,85 +33,86 @@ import java.util.UUID;
 @Builder
 @Getter
 @Slf4j
-public class TaskRecord {
+public class Event {
+
     public static final String F_SVC_NAME = "svcName";
-    public static final String F_TASK_TYPE = "taskType";
-    public static final String F_TASK_UUID = "taskUuid";
+    public static final String F_EVENT_TYPE = "eventType";
     public static final String F_DATA = "data";
     public static final String F_DATA_TYPE = "dataType";
-    public static final String F_RESULT = "result";
-    public static final String F_RESULT_TYPE = "resultType";
     public static final String F_CREATE_AT = "createAt";
     public static final String F_EXPIRE_AT = "expireAt";
-    public static final String F_TASK_STATE = "taskState";
+    public static final String F_EVENT_STATE = "eventState";
     public static final String F_TRY_TIMES = "tryTimes";
     public static final String F_TRIED_TIMES = "triedTimes";
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void init(String uuid, Class<?> taskClass, Object param, String svcName, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
+    public void init(Object payload, String svcName, LocalDateTime now, Duration expireAfter, int retryTimes) {
         this.svcName = svcName;
-        this.taskUuid = StringUtils.isNotBlank(uuid)
-                ? uuid
-                : UUID.randomUUID().toString();
-        this.taskType = taskClass.getName();
-        this.createAt = schedule;
-        this.expireAt = schedule.plusSeconds((int) expireAfter.getSeconds());
-        this.taskState = TaskState.INIT;
+        this.createAt = now;
+        this.expireAt = now.plusSeconds((int) expireAfter.getSeconds());
+        this.eventState = EventState.INIT;
         this.tryTimes = retryTimes;
         this.triedTimes = 0;
-        this.lastTryTime = schedule;
-        this.loadParam(param);
-        Retry retry = taskClass.getAnnotation(Retry.class);
-        if (retry != null) {
-            this.tryTimes = retry.retryTimes();
-            this.expireAt = this.createAt.plusSeconds(retry.expireAfter());
-        }
+        this.lastTryTime = now;
+        this.loadPayload(payload);
     }
 
     @Transient
-    private Object param = null;
+    private Object payload = null;
 
-    public Object getParam() {
-        if (this.param != null) {
-            return this.param;
+    public Object getPayload() {
+        if (this.payload != null) {
+            return this.payload;
         }
         if (StringUtils.isNotBlank(dataType)) {
             Class dataClass = null;
             try {
                 dataClass = Class.forName(dataType);
             } catch (ClassNotFoundException e) {
-                e.printStackTrace();
-                log.error("任务参数类型解析错误", e);
+                log.error("事件类型解析错误", e);
             }
-            this.param = JSON.parseObject(this.data, dataClass);
+            this.payload = JSON.parseObject(data, dataClass);
         }
-        return this.param;
+        return this.payload;
     }
 
-    private void loadParam(Object param) {
-        this.param = param;
-        this.data = JSON.toJSONString(param);
-        this.dataType = param.getClass().getName();
+    private void loadPayload(Object payload) {
+        this.payload = payload;
+        this.data = JSON.toJSONString(payload);
+        this.dataType = payload.getClass().getName();
+        DomainEvent domainEvent = payload == null
+                ? null
+                : payload.getClass().getAnnotation(DomainEvent.class);
+        if(domainEvent != null) {
+            this.eventType = domainEvent.value();
+        }
+        Retry retry = payload == null
+                ? null
+                : payload.getClass().getAnnotation(Retry.class);
+        if (retry != null) {
+            this.tryTimes = retry.retryTimes();
+            this.expireAt = this.createAt.plusSeconds(retry.expireAfter());
+        }
     }
 
-    public boolean beginRun(LocalDateTime now) {
+    public boolean beginDelivery(LocalDateTime now) {
         if (this.triedTimes >= this.tryTimes) {
-            this.taskState = TaskState.FAILED;
+            this.eventState = EventState.FAILED;
             return false;
         }
         if (now.isAfter(this.expireAt)) {
-            this.taskState = TaskState.EXPIRED;
+            this.eventState = EventState.EXPIRED;
             return false;
         }
-        if (!TaskState.INIT.equals(this.taskState)
-                && !TaskState.COMFIRMING.equals(this.taskState)) {
+        if (!EventState.INIT.equals(this.eventState)
+                && !EventState.COMFIRMING.equals(this.eventState)) {
             return false;
         }
         if (this.nextTryTime.isAfter(now)) {
             return false;
         }
-        this.taskState = TaskState.COMFIRMING;
+        this.eventState = EventState.COMFIRMING;
         this.lastTryTime = now;
         this.nextTryTime = calculateNextTryTime(now);
         this.triedTimes++;
@@ -118,18 +120,20 @@ public class TaskRecord {
     }
 
     private LocalDateTime calculateNextTryTime(LocalDateTime now) {
-        Retry retry = getParam() == null
+        Retry retry = getPayload() == null
                 ? null
-                : getParam().getClass().getAnnotation(Retry.class);
-        if (retry == null || retry.retryIntervals().length == 0) {
+                : getPayload().getClass().getAnnotation(Retry.class);
+        if (Objects.isNull(retry) || retry.retryIntervals().length == 0) {
             if (this.triedTimes <= 3) {
-                return now.plusMinutes(10);
+                return now.plusSeconds(10);
             } else if (this.triedTimes <= 6) {
-                return now.plusMinutes(30);
+                return now.plusSeconds(30);
             } else if (this.triedTimes <= 10) {
-                return now.plusMinutes(60);
+                return now.plusSeconds(60);
+            } else if (this.triedTimes <= 20) {
+                return now.plusMinutes(5);
             } else {
-                return now.plusMinutes(60);
+                return now.plusMinutes(10);
             }
         }
         int index = this.triedTimes - 1;
@@ -141,32 +145,18 @@ public class TaskRecord {
         return now.plusSeconds(retry.retryIntervals()[index]);
     }
 
-    public void confirmedCompeleted(Object result, LocalDateTime now) {
-        this.result = JSON.toJSONString(result);
-        this.resultType = result == null ? "" : result.getClass().getName();
-        this.taskState = TaskState.DELIVERED;
+    public void confirmedDelivered(LocalDateTime now) {
+        this.eventState = EventState.DELIVERED;
     }
 
     public void cancel(LocalDateTime now) {
-        this.taskState = TaskState.CANCEL;
-    }
-
-    public Class getTaskClass() {
-        Class taskClass = null;
-        try {
-            taskClass = Class.forName(taskType);
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-            log.error("任务类型解析错误", e);
-        }
-        return taskClass;
+        this.eventState = EventState.CANCEL;
     }
 
     @Override
     public String toString() {
         return JSON.toJSONString(this);
     }
-
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -181,46 +171,25 @@ public class TaskRecord {
     private String svcName;
 
     /**
-     * 任务类型
-     * varchar(255)
+     * 事件类型
+     * varchar(100)
      */
-    @Column(name = "`task_type`")
-    private String taskType;
+    @Column(name = "`event_type`")
+    private String eventType;
 
     /**
-     * 任务uuid
-     * varchar(64)
-     */
-    @Column(name = "`task_uuid`")
-    private String taskUuid;
-
-    /**
-     * 任务数据
-     * text
+     * 事件数据
+     * varchar(1000)
      */
     @Column(name = "`data`")
     private String data;
 
     /**
-     * 任务数据类型
-     * varchar(255)
+     * 事件数据类型
+     * varchar(200)
      */
     @Column(name = "`data_type`")
     private String dataType;
-
-    /**
-     * 任务结果数据
-     * text
-     */
-    @Column(name = "`result`")
-    private String result;
-
-    /**
-     * 任务结果类型
-     * varchar(255)
-     */
-    @Column(name = "`result_type`")
-    private String resultType;
 
     /**
      * 创建时间
@@ -240,9 +209,9 @@ public class TaskRecord {
      * 分发状态
      * int
      */
-    @Column(name = "`task_state`")
-    @Convert(converter = TaskState.Converter.class)
-    private TaskState taskState;
+    @Column(name = "`event_state`")
+    @Convert(converter = EventState.Converter.class)
+    private EventState eventState;
 
     /**
      * 尝试次数
@@ -295,7 +264,7 @@ public class TaskRecord {
     private Date dbUpdatedAt;
 
     @AllArgsConstructor
-    public static enum TaskState {
+    public static enum EventState {
         /**
          * 初始状态
          */
@@ -325,8 +294,8 @@ public class TaskRecord {
         @Getter
         private final String name;
 
-        public static TaskState valueOf(Integer value) {
-            for (TaskState val : TaskState.values()) {
+        public static EventState valueOf(Integer value) {
+            for (EventState val : EventState.values()) {
                 if (Objects.equals(val.value, value)) {
                     return val;
                 }
@@ -334,17 +303,18 @@ public class TaskRecord {
             return null;
         }
 
-        public static class Converter implements AttributeConverter<TaskState, Integer> {
+        public static class Converter implements AttributeConverter<EventState, Integer> {
 
             @Override
-            public Integer convertToDatabaseColumn(TaskState attribute) {
+            public Integer convertToDatabaseColumn(EventState attribute) {
                 return attribute.value;
             }
 
             @Override
-            public TaskState convertToEntityAttribute(Integer dbData) {
-                return TaskState.valueOf(dbData);
+            public EventState convertToEntityAttribute(Integer dbData) {
+                return EventState.valueOf(dbData);
             }
         }
     }
 }
+

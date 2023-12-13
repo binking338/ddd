@@ -325,7 +325,7 @@ public class JpaUnitOfWork implements UnitOfWork {
             EventRecord event = eventRecordRepository.create();
             event.init(eventPayload, this.svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
             event.beginDelivery(LocalDateTime.now());
-            event = eventRecordRepository.save(event);
+            eventRecordRepository.save(event);
             persistedEvents.add(event);
         }
         domainEventSupervisor.reset();

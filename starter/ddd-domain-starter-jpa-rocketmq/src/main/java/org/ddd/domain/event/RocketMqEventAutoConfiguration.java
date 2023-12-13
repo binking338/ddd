@@ -3,7 +3,8 @@ package org.ddd.domain.event;
 import lombok.RequiredArgsConstructor;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.application.distributed.Locker;
-import org.ddd.domain.event.persistence.EventRecordImplJpaRepository;
+import org.ddd.domain.event.persistence.ArchivedEventJpaRepository;
+import org.ddd.domain.event.persistence.EventJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -12,6 +13,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -32,15 +34,17 @@ import static org.ddd.share.Constants.*;
 @EnableScheduling
 public class RocketMqEventAutoConfiguration {
     private final Locker locker;
-    private final EventRecordImplJpaRepository eventRecordImplJpaRepository;
+    private final EventJpaRepository eventJpaRepository;
+    private final ArchivedEventJpaRepository archivedEventJpaRepository;
     private final RocketMQTemplate rocketMQTemplate;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final List<RocketMqDomainEventSubscriber> subscribers;
+    private final JdbcTemplate jdbcTemplate;
 
     @Bean
     @ConditionalOnMissingBean(EventRecordRepository.class)
     public JpaEventRecordRepository jpaEventRecordRepository() {
-        JpaEventRecordRepository eventRecordRepository = new JpaEventRecordRepository(eventRecordImplJpaRepository);
+        JpaEventRecordRepository eventRecordRepository = new JpaEventRecordRepository(eventJpaRepository);
         return eventRecordRepository;
     }
 
@@ -70,7 +74,8 @@ public class RocketMqEventAutoConfiguration {
 
     @Bean
     public EventScheduleService eventScheduleService(DomainEventPublisher domainEventPublisher) {
-        scheduleService = new EventScheduleService(locker, domainEventPublisher, eventRecordImplJpaRepository);
+        scheduleService = new EventScheduleService(locker, domainEventPublisher, eventJpaRepository, archivedEventJpaRepository, jdbcTemplate);
+        scheduleService.addPartition();
         return scheduleService;
     }
 
@@ -88,6 +93,23 @@ public class RocketMqEventAutoConfiguration {
     public void compensation() {
         if (scheduleService == null) return;
         scheduleService.compensation(batchSize, maxConcurrency, Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(maxLockSeconds));
+    }
+
+    @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_BATCHSIZE)
+    private int archiveBatchSize;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_EXPIREDAYS)
+    private int archiveExpireDays;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_MAXLOCKSECONDS)
+    private int archiveMaxLockSeconds;
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_CRON)
+    public void archive() {
+        if (scheduleService == null) return;
+        scheduleService.archive(archiveExpireDays, archiveBatchSize, Duration.ofSeconds(archiveMaxLockSeconds));
+    }
+
+    @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ADDPARTITION_CRON)
+    public void addTablePartition(){
+        scheduleService.addPartition();
     }
 
 }
