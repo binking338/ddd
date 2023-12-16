@@ -210,11 +210,10 @@ public abstract class SagaStateMachine<Context> {
      * 创建saga流程
      *
      * @param context
-     * @param uuid
      * @return saga
      */
-    public Saga run(Context context, String uuid) {
-        return run(context, true, uuid);
+    public Saga run(Context context) {
+        return run(context, true, null);
     }
 
     /**
@@ -228,7 +227,9 @@ public abstract class SagaStateMachine<Context> {
     public Saga run(Context context, boolean runImmediately, String uuid) {
         if(StringUtils.isNotBlank(uuid)){
             Saga existSaga = getByUuid(uuid).orElse(null);
-            return existSaga;
+            if (existSaga != null) {
+                return existSaga;
+            }
         }
         Saga saga = build(context, runImmediately);
         if (runImmediately) {
