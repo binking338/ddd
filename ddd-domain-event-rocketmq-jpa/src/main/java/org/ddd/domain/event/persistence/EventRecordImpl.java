@@ -28,8 +28,14 @@ public class EventRecordImpl implements EventRecord {
     }
 
     @Override
+    public String toString(){
+        return event.toString();
+    }
+
+    @Override
     public void init(Object payload, String svcName, LocalDateTime now, Duration expireAfter, int retryTimes) {
-        Event.builder().build().init(payload, svcName, now, expireAfter, retryTimes);
+        event = Event.builder().build();
+        event.init(payload, svcName, now, expireAfter, retryTimes);
     }
 
     @Override

@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * @author <template/>
@@ -35,6 +36,7 @@ import java.util.Objects;
 @Slf4j
 public class Event {
 
+    public static final String F_EVENT_UUID = "eventUuid";
     public static final String F_SVC_NAME = "svcName";
     public static final String F_EVENT_TYPE = "eventType";
     public static final String F_DATA = "data";
@@ -48,13 +50,14 @@ public class Event {
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
     public void init(Object payload, String svcName, LocalDateTime now, Duration expireAfter, int retryTimes) {
+        this.eventUuid = UUID.randomUUID().toString();
         this.svcName = svcName;
         this.createAt = now;
         this.expireAt = now.plusSeconds((int) expireAfter.getSeconds());
         this.eventState = EventState.INIT;
         this.tryTimes = retryTimes;
         this.triedTimes = 0;
-        this.lastTryTime = now;
+        this.lastTryTime = LocalDateTime.of(1, 1, 1, 0, 0, 0);
         this.loadPayload(payload);
     }
 
@@ -84,7 +87,7 @@ public class Event {
         DomainEvent domainEvent = payload == null
                 ? null
                 : payload.getClass().getAnnotation(DomainEvent.class);
-        if(domainEvent != null) {
+        if (domainEvent != null) {
             this.eventType = domainEvent.value();
         }
         Retry retry = payload == null
@@ -109,7 +112,7 @@ public class Event {
                 && !EventState.COMFIRMING.equals(this.eventState)) {
             return false;
         }
-        if (this.nextTryTime.isAfter(now)) {
+        if (this.nextTryTime != null && this.nextTryTime.isAfter(now)) {
             return false;
         }
         this.eventState = EventState.COMFIRMING;
@@ -156,12 +159,20 @@ public class Event {
     @Override
     public String toString() {
         return JSON.toJSONString(this);
+        //return String.format("id=%d,svcName=%s,eventType=%s,dataType=%s,data=%s", id, svcName, eventType, data, dataType);
     }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "`id`")
     private Long id;
+
+    /**
+     * 事件uuid
+     * varchar(64)
+     */
+    @Column(name = "`event_uuid`")
+    private String eventUuid;
 
     /**
      * 服务

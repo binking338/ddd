@@ -1,5 +1,6 @@
 CREATE TABLE `__event` (
                            `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                           `event_uuid` varchar(64) NOT NULL DEFAULT '',
                            `svc_name` varchar(255) NOT NULL DEFAULT '',
                            `event_type` varchar(255) NOT NULL DEFAULT '',
                            `data` text,
@@ -18,6 +19,7 @@ CREATE TABLE `__event` (
                                         `id`
                                         -- , `db_created_at`
                                        ),
+                           KEY `idx_event_uuid` (`event_uuid`),
                            KEY `idx_next_try_time` (`next_try_time`,`event_type`,`svc_name`),
                            KEY `idx_expire_at` (`expire_at`),
                            KEY `idx_create_at` (`create_at`),
@@ -30,6 +32,7 @@ CREATE TABLE `__event` (
 
 CREATE TABLE `__archived_event` (
                            `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                           `event_uuid` varchar(64) NOT NULL DEFAULT '',
                            `svc_name` varchar(255) NOT NULL DEFAULT '',
                            `event_type` varchar(255) NOT NULL DEFAULT '',
                            `data` text,
@@ -48,6 +51,7 @@ CREATE TABLE `__archived_event` (
                                         `id`
                                -- , `db_created_at`
                                ),
+                           KEY `idx_event_uuid` (`event_uuid`),
                            KEY `idx_next_try_time` (`next_try_time`,`event_type`,`svc_name`),
                            KEY `idx_expire_at` (`expire_at`),
                            KEY `idx_create_at` (`create_at`),

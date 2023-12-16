@@ -114,7 +114,7 @@ public class SagaScheduleService {
                         continue;
                     }
                     for (Saga saga : sagas.toList()) {
-                        log.info("SAGA事务补偿: %s", JSON.toJSONString(saga));
+                        log.info("SAGA事务补偿: %s", saga.toString());
                         LocalDateTime nextTryTime = saga.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {

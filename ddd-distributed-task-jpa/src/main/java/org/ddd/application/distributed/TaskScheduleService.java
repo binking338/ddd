@@ -102,7 +102,7 @@ public class TaskScheduleService {
                         continue;
                     }
                     for (TaskRecord taskRecord : tasks.getContent()) {
-                        log.info("异步任务补偿: %s", JSON.toJSONString(taskRecord));
+                        log.info("异步任务补偿: {}", taskRecord.toString());
                         LocalDateTime nextTryTime = taskRecord.getNextTryTime();
                         taskRecord.beginRun(nextTryTime);
                         taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);

@@ -40,6 +40,13 @@ public class ArchivedSaga {
     private Long id;
 
     /**
+     * uuid
+     * varchar(64)
+     */
+    @Column(name = "`saga_uuid`")
+    private String sagaUuid;
+
+    /**
      * 服务
      * varchar
      */

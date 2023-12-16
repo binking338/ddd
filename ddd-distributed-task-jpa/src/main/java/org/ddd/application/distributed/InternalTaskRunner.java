@@ -42,7 +42,7 @@ public class InternalTaskRunner {
 
     public void run(TaskRecord taskRecord, Duration delay) {
         executor.schedule(() -> {
-            log.info("正在执行异步任务: %s", JSON.toJSONString(taskRecord));
+            log.info("正在执行异步任务: {}", taskRecord.toString());
             Task task = resolveTask(taskRecord.getTaskClass());
             Object result = null;
             try {
@@ -50,7 +50,7 @@ public class InternalTaskRunner {
                 task.onSuccess(taskRecord.getParam(), result);
                 taskRecord.confirmedCompeleted(result, LocalDateTime.now());
                 taskRecordJpaRepository.save(taskRecord);
-                log.info("结束执行异步任务: id=%s", taskRecord.getId());
+                log.info("结束执行异步任务: id={}", taskRecord.getId());
             } catch (Exception ex) {
                 task.onFail(taskRecord.getParam(), ex);
                 log.error("异步任务执行异常", ex);

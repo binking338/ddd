@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
+import org.ddd.share.annotation.Retry;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * @author <template/>
@@ -30,6 +32,7 @@ import java.util.Objects;
 @Builder
 @Getter
 public class Saga {
+    public static final String F_SAGA_UUID = "sagaUuid";
     public static final String F_SVC_NAME = "svcName";
     public static final String F_BIZ_TYPE = "bizType";
     public static final String F_CONTEXT_DATA = "contextData";
@@ -43,6 +46,7 @@ public class Saga {
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
     public void init(LocalDateTime now, String svcName, String bizType, Object context, Class contextClass, LocalDateTime nextTryTime, int expireInSeconds, int retryTimes, List<SagaProcess> sagaProcesses) {
+        this.sagaUuid = UUID.randomUUID().toString();
         this.svcName = svcName;
         this.bizType = bizType;
         this.contextData = (JSON.toJSONString(context));
@@ -52,7 +56,7 @@ public class Saga {
         this.expireAt = now.plusSeconds(expireInSeconds);
         this.tryTimes = retryTimes;
         this.triedTimes = 0;
-        this.lastTryTime = now;
+        this.lastTryTime = LocalDateTime.of(1, 1, 1, 0, 0, 0);
         this.nextTryTime = nextTryTime;
         this.processes = sagaProcesses;
     }
@@ -67,7 +71,8 @@ public class Saga {
             return false;
         }
         if (!SagaState.INIT.equals(this.sagaState)
-                && (!SagaState.RUNNING.equals(this.sagaState) || this.nextTryTime.isAfter(now))) {
+                && (!SagaState.RUNNING.equals(this.sagaState) ||
+                (this.nextTryTime != null && this.nextTryTime.isAfter(now)))) {
             return false;
         }
         this.sagaState = SagaState.RUNNING;
@@ -100,10 +105,10 @@ public class Saga {
             this.sagaState = SagaState.EXPIRED;
             return false;
         }
-        if(SagaState.ROLLBACKING.equals(this.sagaState)){
+        if (SagaState.ROLLBACKING.equals(this.sagaState)) {
             return true;
         }
-        if (!SagaState.FAILED.equals(this.sagaState) ) {
+        if (!SagaState.FAILED.equals(this.sagaState)) {
             return false;
         }
         this.nextTryTime = nextTryTime;
@@ -133,6 +138,13 @@ public class Saga {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "`id`")
     private Long id;
+
+    /**
+     * uuid
+     * varchar(64)
+     */
+    @Column(name = "`saga_uuid`")
+    private String sagaUuid;
 
     /**
      * 服务

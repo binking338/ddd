@@ -44,6 +44,13 @@ public class ArchivedTaskRecord {
     private Long id;
 
     /**
+     * 任务uuid
+     * varchar(64)
+     */
+    @Column(name = "`task_uuid`")
+    private String taskUuid;
+
+    /**
      * 服务
      * varchar
      */
@@ -56,13 +63,6 @@ public class ArchivedTaskRecord {
      */
     @Column(name = "`task_type`")
     private String taskType;
-
-    /**
-     * 任务uuid
-     * varchar(64)
-     */
-    @Column(name = "`task_uuid`")
-    private String taskUuid;
 
     /**
      * 任务数据

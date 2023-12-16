@@ -1,8 +1,8 @@
 CREATE TABLE `__task` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                          `task_uuid` varchar(64) NOT NULL DEFAULT '',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `task_type` varchar(255) NOT NULL DEFAULT '',
-                          `task_uuid` varchar(64) NOT NULL DEFAULT '',
                           `data` text,
                           `data_type` varchar(255) NOT NULL DEFAULT '',
                           `result` text,
@@ -36,9 +36,9 @@ CREATE TABLE `__task` (
 
 CREATE TABLE `__archived_task` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                          `task_uuid` varchar(64) NOT NULL DEFAULT '',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `task_type` varchar(255) NOT NULL DEFAULT '',
-                          `task_uuid` varchar(64) NOT NULL DEFAULT '',
                           `data` text,
                           `data_type` varchar(255) NOT NULL DEFAULT '',
                           `result` text,

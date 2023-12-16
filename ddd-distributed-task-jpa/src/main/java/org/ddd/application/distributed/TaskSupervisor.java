@@ -1,5 +1,7 @@
 package org.ddd.application.distributed;
 
+import java.time.Duration;
+
 /**
  * @author qiaohe
  * @date 2023/8/5
@@ -7,25 +9,30 @@ package org.ddd.application.distributed;
 public interface TaskSupervisor {
     /**
      * 即时任务
-     * @param uuid
      * @param taskClass
      * @param param
+     * @param uuid
+     * @param expire
+     * @param retryTimes
      * @param <Param>
      * @param <Result>
+     * @param <T>
+     * @return 是否提交成功
      */
-    <Param, Result> void run(String uuid, Class<Task<Param, Result>> taskClass, Param param, java.time.Duration expire, int retryTimes);
+    <Param, Result, T extends Task<Param, Result>> boolean run(Class<T> taskClass, Param param, String uuid, Duration expire, int retryTimes);
 
     /**
      * 延时任务
-     * @param uuid
      * @param taskClass
      * @param param
+     * @param uuid
      * @param delay
      * @param expire
      * @param retryTimes
      * @param <Param>
      * @param <Result>
+     * @return 是否提交成功
      */
-    <Param, Result> void delay(String uuid, Class<Task<Param, Result>> taskClass, Param param, java.time.Duration delay, java.time.Duration expire, int retryTimes);
+    <Param, Result, T extends Task<Param, Result>> boolean delay(Class<T> taskClass, Param param, String uuid, java.time.Duration delay, java.time.Duration expire, int retryTimes);
 
 }

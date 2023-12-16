@@ -11,6 +11,7 @@ import org.ddd.share.DomainException;
 import org.hibernate.engine.spi.SessionImplementor;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -69,10 +70,20 @@ public class JpaUnitOfWork implements UnitOfWork {
     }
 
     public void save(Propagation propagation) {
-        Set<Object> persistEntityList = persistedEntitiesThreadLocal.get().stream().collect(Collectors.toSet());
-        persistedEntitiesThreadLocal.get().clear();
-        Set<Object> deleteEntityList = removedEntitiesThreadLocal.get().stream().collect(Collectors.toSet());
-        removedEntitiesThreadLocal.get().clear();
+        Set<Object> persistEntityList = null;
+        if (persistedEntitiesThreadLocal.get() != null) {
+            persistEntityList = persistedEntitiesThreadLocal.get().stream().collect(Collectors.toSet());
+            persistedEntitiesThreadLocal.get().clear();
+        } else {
+            persistEntityList = new HashSet<>();
+        }
+        Set<Object> deleteEntityList = null;
+        if(removedEntitiesThreadLocal.get() != null){
+            deleteEntityList = removedEntitiesThreadLocal.get().stream().collect(Collectors.toSet());
+            removedEntitiesThreadLocal.get().clear();
+        } else {
+            deleteEntityList = new HashSet<>();
+        }
         for (Object entity : persistenceContextEntities()) {
             // 如果不在删除列表中，则加入保存列表
             if (!deleteEntityList.contains(entity)) {
@@ -138,7 +149,8 @@ public class JpaUnitOfWork implements UnitOfWork {
 
     @Getter
     @PersistenceContext
-    private EntityManager entityManager;
+    protected EntityManager entityManager;
+    protected static JpaUnitOfWork instance;
 
     public interface QueryBuilder<R, F> {
         void build(CriteriaBuilder cb, CriteriaQuery<R> cq, Root<F> root);
@@ -203,26 +215,26 @@ public class JpaUnitOfWork implements UnitOfWork {
         O result = null;
         switch (propagation) {
             case SUPPORTS:
-                result = supports(transactionHandler, i);
+                result = instance.supports(transactionHandler, i);
                 break;
             case NOT_SUPPORTED:
-                result = notSupported(transactionHandler, i);
+                result = instance.notSupported(transactionHandler, i);
                 break;
             case REQUIRES_NEW:
-                result = requiresNew(transactionHandler, i);
+                result = instance.requiresNew(transactionHandler, i);
                 break;
             case MANDATORY:
-                result = mandatory(transactionHandler, i);
+                result = instance.mandatory(transactionHandler, i);
                 break;
             case NEVER:
-                result = never(transactionHandler, i);
+                result = instance.never(transactionHandler, i);
                 break;
             case NESTED:
-                result = nested(transactionHandler, i);
+                result = instance.nested(transactionHandler, i);
                 break;
             case REQUIRED:
             default:
-                result = required(transactionHandler, i);
+                result = instance.required(transactionHandler, i);
                 break;
         }
         return result;

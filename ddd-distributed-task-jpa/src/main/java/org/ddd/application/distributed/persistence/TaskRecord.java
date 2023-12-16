@@ -33,9 +33,9 @@ import java.util.UUID;
 @Getter
 @Slf4j
 public class TaskRecord {
+    public static final String F_TASK_UUID = "taskUuid";
     public static final String F_SVC_NAME = "svcName";
     public static final String F_TASK_TYPE = "taskType";
-    public static final String F_TASK_UUID = "taskUuid";
     public static final String F_DATA = "data";
     public static final String F_DATA_TYPE = "dataType";
     public static final String F_RESULT = "result";
@@ -48,23 +48,27 @@ public class TaskRecord {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void init(String uuid, Class<?> taskClass, Object param, String svcName, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
+    public void init(String uuid, Class<?> taskClass, Object param, String svcName, LocalDateTime now, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
         this.svcName = svcName;
         this.taskUuid = StringUtils.isNotBlank(uuid)
                 ? uuid
                 : UUID.randomUUID().toString();
         this.taskType = taskClass.getName();
-        this.createAt = schedule;
-        this.expireAt = schedule.plusSeconds((int) expireAfter.getSeconds());
+        this.createAt = now;
         this.taskState = TaskState.INIT;
-        this.tryTimes = retryTimes;
         this.triedTimes = 0;
-        this.lastTryTime = schedule;
+        this.lastTryTime = LocalDateTime.of(1, 1, 1, 0, 0, 0);
         this.loadParam(param);
         Retry retry = taskClass.getAnnotation(Retry.class);
         if (retry != null) {
             this.tryTimes = retry.retryTimes();
             this.expireAt = this.createAt.plusSeconds(retry.expireAfter());
+        }
+        if(retryTimes>0){
+            this.tryTimes = retryTimes;
+        }
+        if(expireAfter!=null && expireAfter.getSeconds() > 0){
+            this.expireAt = schedule.plusSeconds((int) expireAfter.getSeconds());
         }
     }
 
@@ -91,7 +95,9 @@ public class TaskRecord {
     private void loadParam(Object param) {
         this.param = param;
         this.data = JSON.toJSONString(param);
-        this.dataType = param.getClass().getName();
+        this.dataType = param == null
+                ? Object.class.getName()
+                : param.getClass().getName();
     }
 
     public boolean beginRun(LocalDateTime now) {
@@ -107,7 +113,7 @@ public class TaskRecord {
                 && !TaskState.COMFIRMING.equals(this.taskState)) {
             return false;
         }
-        if (this.nextTryTime.isAfter(now)) {
+        if (this.nextTryTime != null && this.nextTryTime.isAfter(now)) {
             return false;
         }
         this.taskState = TaskState.COMFIRMING;
@@ -143,7 +149,9 @@ public class TaskRecord {
 
     public void confirmedCompeleted(Object result, LocalDateTime now) {
         this.result = JSON.toJSONString(result);
-        this.resultType = result == null ? "" : result.getClass().getName();
+        this.resultType = result == null
+                ? Object.class.getName()
+                : result.getClass().getName();
         this.taskState = TaskState.DELIVERED;
     }
 
@@ -174,6 +182,13 @@ public class TaskRecord {
     private Long id;
 
     /**
+     * 任务uuid
+     * varchar(64)
+     */
+    @Column(name = "`task_uuid`")
+    private String taskUuid;
+
+    /**
      * 服务
      * varchar
      */
@@ -186,13 +201,6 @@ public class TaskRecord {
      */
     @Column(name = "`task_type`")
     private String taskType;
-
-    /**
-     * 任务uuid
-     * varchar(64)
-     */
-    @Column(name = "`task_uuid`")
-    private String taskUuid;
 
     /**
      * 任务数据

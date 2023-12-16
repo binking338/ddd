@@ -5,6 +5,7 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.domain.event.DomainEventPublisher;
 import org.ddd.domain.event.DomainEventSupervisor;
 import org.ddd.domain.event.EventRecordRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
@@ -37,5 +38,10 @@ public class JpaRepositoryAutoConfiguration {
         return unitOfWork;
     }
 
-
+    @Configuration
+    private static class JpaLoader {
+        public JpaLoader(@Autowired(required = false) JpaUnitOfWork jpaUnitOfWork){
+            JpaUnitOfWork.instance = jpaUnitOfWork;
+        }
+    }
 }

@@ -12,7 +12,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.SystemPropertyUtils;
 
@@ -109,7 +108,7 @@ public class EventScheduleService {
                         continue;
                     }
                     for (Event event : events.getContent()) {
-                        log.info("事件发送补偿: %s", JSON.toJSONString(event));
+                        log.info("事件发送补偿: {}", event.toString());
                         LocalDateTime nextTryTime = event.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {

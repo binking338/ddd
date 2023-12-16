@@ -7,6 +7,8 @@ import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.share.DomainException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.SystemPropertyUtils;
 
 import java.time.Duration;
@@ -47,6 +49,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void publish(Object eventPayload) {
         EventRecord event = null;
         if (eventPayload instanceof EventRecord) {
@@ -65,9 +68,11 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
                 rocketMQTemplate.asyncSend(destination, event.getPayload(), new DomainEventSendCallback(event, eventRecordRepository));
             } else {
                 rocketMqDomainEventSubscriberManager.trigger(event.getPayload());
+                event.confirmedDelivered(LocalDateTime.now());
+                eventRecordRepository.save(event);
             }
         } catch (Exception ex) {
-            log.error("集成事件发布失败", ex);
+            log.error(String.format("集成事件发布失败: %s", event.toString()), ex);
         }
     }
 

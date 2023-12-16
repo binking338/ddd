@@ -12,6 +12,7 @@ import org.ddd.application.distributed.persistence.Saga;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.ddd.share.annotation.Retry;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.SystemPropertyUtils;
 
 import javax.annotation.PostConstruct;
@@ -28,9 +29,9 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
  * @date
  */
 @Slf4j
-@RequiredArgsConstructor
 public abstract class SagaStateMachine<Context> {
-    private final SagaJpaRepository sagaJpaRepository;
+    @Autowired
+    private SagaJpaRepository sagaJpaRepository;
 
     protected String svcName;
     protected Process<Context> process;
@@ -46,7 +47,9 @@ public abstract class SagaStateMachine<Context> {
      *
      * @return
      */
-    protected abstract String getBizType();
+    protected String getBizType(){
+        return this.getClass().getName();
+    }
 
     /**
      * 上下文类型
@@ -191,23 +194,42 @@ public abstract class SagaStateMachine<Context> {
         }
     }
 
+    protected Optional<Saga> getByUuid(String uuid){
+        Optional<Saga> saga = sagaJpaRepository.findOne(((root, query, cb) -> {
+            query.where(cb.and(
+                    cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
+                    cb.equal(root.get(Saga.F_BIZ_TYPE), getBizType()),
+                    cb.equal(root.get(Saga.F_SVC_NAME), svcName)
+            ));
+            return null;
+        }));
+        return saga;
+    }
+
     /**
      * 创建saga流程
      *
      * @param context
-     * @return saga id
+     * @param uuid
+     * @return saga
      */
-    public Saga run(Context context) {
-        return run(context, true);
+    public Saga run(Context context, String uuid) {
+        return run(context, true, uuid);
     }
 
     /**
      * 创建并执行saga流程
      *
      * @param context
+     * @param runImmediately
+     * @param uuid
      * @return
      */
-    public Saga run(Context context, boolean runImmediately) {
+    public Saga run(Context context, boolean runImmediately, String uuid) {
+        if(StringUtils.isNotBlank(uuid)){
+            Saga existSaga = getByUuid(uuid).orElse(null);
+            return existSaga;
+        }
         Saga saga = build(context, runImmediately);
         if (runImmediately) {
             LocalDateTime now = LocalDateTime.now();
@@ -217,6 +239,19 @@ public abstract class SagaStateMachine<Context> {
             saga = sagaJpaRepository.saveAndFlush(saga);
         }
         return saga;
+    }
+
+    /**
+     * 开始复原saga流程
+     *
+     * @param uuid
+     * @param now
+     * @return
+     */
+    public Saga beginResume(String uuid, LocalDateTime now) {
+        Saga saga = getByUuid(uuid)
+                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
+        return beginResume(saga, now);
     }
 
     /**
@@ -236,6 +271,19 @@ public abstract class SagaStateMachine<Context> {
         }
         saga = sagaJpaRepository.saveAndFlush(saga);
         return saga;
+    }
+
+    /**
+     * 复原saga流程
+     *
+     * @param uuid
+     * @param now
+     * @return
+     */
+    public Saga resume(String uuid, LocalDateTime now) {
+        Saga saga = getByUuid(uuid)
+                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
+        return resume(saga);
     }
 
     /**
@@ -342,7 +390,27 @@ public abstract class SagaStateMachine<Context> {
         return saga;
     }
 
-    public Saga beginRollback(Saga saga, LocalDateTime now){
+    /**
+     * 开始回滚Saga
+     *
+     * @param uuid
+     * @param now
+     * @return
+     */
+    public Saga beginRollback(String uuid, LocalDateTime now) {
+        Saga saga = getByUuid(uuid)
+                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
+        return beginRollback(saga, now);
+    }
+
+    /**
+     * 开始回滚Saga
+     *
+     * @param saga
+     * @param now
+     * @return
+     */
+    public Saga beginRollback(Saga saga, LocalDateTime now) {
         if (!this.getBizType().equals(saga.getBizType())) {
             log.error("bizType不匹配 sagaId=" + saga.getId());
             return null;
@@ -352,6 +420,24 @@ public abstract class SagaStateMachine<Context> {
         return saga;
     }
 
+    /**
+     * 回滚saga
+     *
+     * @param uuid
+     * @return
+     */
+    public Saga rollback(String uuid) {
+        Saga saga = getByUuid(uuid)
+                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
+        return rollback(saga);
+    }
+
+    /**
+     *  回滚saga
+     *
+     * @param saga
+     * @return
+     */
     public Saga rollback(Saga saga) {
         if (!this.getBizType().equals(saga.getBizType())) {
             log.error("bizType不匹配 sagaId=" + saga.getId());

@@ -1,5 +1,6 @@
 CREATE TABLE `__saga` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                          `saga_uuid` varchar(64) NOT NULL DEFAULT '',
                           `biz_type` int(11) NOT NULL DEFAULT '0',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `context_data` text,
@@ -18,6 +19,7 @@ CREATE TABLE `__saga` (
                                        `id`
                                        -- , `db_created_at`
                                       ),
+                          KEY `idx_saga_uuid` (`saga_uuid`),
                           KEY `idx_next_try_time` (`next_try_time`,`saga_state`,`svc_name`,`biz_type`),
                           KEY `idx_expire_at` (`expire_at`),
                           KEY `idx_create_at` (`create_at`),
@@ -56,6 +58,7 @@ CREATE TABLE `__saga_process` (
 
 CREATE TABLE `__archived_saga` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                          `saga_uuid` varchar(64) NOT NULL DEFAULT '',
                           `biz_type` int(11) NOT NULL DEFAULT '0',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `context_data` text,
@@ -74,6 +77,7 @@ CREATE TABLE `__archived_saga` (
                                        `id`
                               -- , `db_created_at`
                               ),
+                          KEY `idx_saga_uuid` (`saga_uuid`),
                           KEY `idx_next_try_time` (`next_try_time`,`saga_state`,`svc_name`,`biz_type`),
                           KEY `idx_expire_at` (`expire_at`),
                           KEY `idx_create_at` (`create_at`),

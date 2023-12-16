@@ -11,8 +11,8 @@ import java.util.List;
  */
 public class DefaultDomainEventSupervisor implements DomainEventSupervisor {
     public static DomainEventSupervisor Instance = new DefaultDomainEventSupervisor();
-    private final ThreadLocal<List<Object>> TL_EVENT_PAYLOADS = new ThreadLocal<List<Object>>();
-    private final List<Object> EMPTY_EVENT_PAYLOADS = Collections.emptyList();
+    private static final ThreadLocal<List<Object>> TL_EVENT_PAYLOADS = new ThreadLocal<List<Object>>();
+    private static final List<Object> EMPTY_EVENT_PAYLOADS = Collections.emptyList();
 
     public void attach(Object eventPayload) {
         List<Object> eventPayloads = TL_EVENT_PAYLOADS.get();
