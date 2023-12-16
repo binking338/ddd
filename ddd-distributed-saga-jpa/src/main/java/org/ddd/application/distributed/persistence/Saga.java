@@ -45,12 +45,12 @@ public class Saga {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void init(LocalDateTime now, String svcName, String bizType, Object context, Class contextClass, LocalDateTime nextTryTime, int expireInSeconds, int retryTimes, List<SagaProcess> sagaProcesses) {
-        this.sagaUuid = UUID.randomUUID().toString();
+    public void init(LocalDateTime now, String svcName, String bizType, Object context, String uuid, LocalDateTime nextTryTime, int expireInSeconds, int retryTimes, List<SagaProcess> sagaProcesses) {
+        this.sagaUuid = StringUtils.isNotBlank(uuid) ? uuid : UUID.randomUUID().toString();
         this.svcName = svcName;
         this.bizType = bizType;
         this.contextData = (JSON.toJSONString(context));
-        this.contextDataType = contextClass.getName();
+        this.contextDataType = context == null ? Object.class.getName() : context.getClass().getName();
         this.sagaState = SagaState.INIT;
         this.createAt = now;
         this.expireAt = now.plusSeconds(expireInSeconds);

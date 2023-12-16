@@ -228,10 +228,11 @@ public abstract class SagaStateMachine<Context> {
         if(StringUtils.isNotBlank(uuid)){
             Saga existSaga = getByUuid(uuid).orElse(null);
             if (existSaga != null) {
+                log.warn("Saga已提交，勿重复提交: " + uuid);
                 return existSaga;
             }
         }
-        Saga saga = build(context, runImmediately);
+        Saga saga = build(context, runImmediately, uuid);
         if (runImmediately) {
             LocalDateTime now = LocalDateTime.now();
             saga = beginResume(saga, now);
@@ -315,9 +316,10 @@ public abstract class SagaStateMachine<Context> {
     /**
      * @param context
      * @param runningState
+     * @param uuid
      * @return
      */
-    protected Saga build(Context context, boolean runningState) {
+    protected Saga build(Context context, boolean runningState, String uuid) {
         // 持久化
         LocalDateTime now = LocalDateTime.now();
         List<Saga.SagaProcess> sagaProcesses = process.flattenProcessList().stream().map(p -> {
@@ -327,7 +329,7 @@ public abstract class SagaStateMachine<Context> {
         }).collect(Collectors.toList());
         Saga saga = new Saga();
         LocalDateTime nextTryTime = runningState ? now.plusSeconds(getNextTryIdleInSeconds(0)) : now;
-        saga.init(now, svcName, getBizType(), context, getContextClass(), nextTryTime, expireInSeconds(), retryTimes(), sagaProcesses);
+        saga.init(now, svcName, getBizType(), context, uuid, nextTryTime, expireInSeconds(), retryTimes(), sagaProcesses);
         return saga;
     }
 
