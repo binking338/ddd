@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.SystemPropertyUtils;
 
+import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -46,7 +47,13 @@ public class SagaScheduleService {
     private final SagaSupervisor sagaSupervisor;
     private final Locker locker;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE)));
+    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE)
+    private int threadPoolsize;
+    private ScheduledThreadPoolExecutor executor = null;
+    @PostConstruct
+    public void init(){
+        executor = executor = new ScheduledThreadPoolExecutor(threadPoolsize);
+    }
 
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
