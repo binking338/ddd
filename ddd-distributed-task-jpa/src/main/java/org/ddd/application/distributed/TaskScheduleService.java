@@ -10,6 +10,7 @@ import org.ddd.application.distributed.persistence.ArchivedTaskRecord;
 import org.ddd.application.distributed.persistence.ArchivedTaskRecordJpaRepository;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -40,21 +41,17 @@ public class TaskScheduleService {
     private final ArchivedTaskRecordJpaRepository archivedTaskRecordJpaRepository;
     private final InternalTaskRunner internalTaskRunner;
 
+    @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
     private String getSvcName() {
-        if (svcName == null) {
-            svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        }
         return svcName;
     }
 
+    @Value(KEY_COMPENSATION_LOCKER)
     private String compensationLockerKey = null;
 
     private String getCompensationLockerKey() {
-        if (compensationLockerKey == null) {
-            compensationLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_COMPENSATION_LOCKER);
-        }
         return compensationLockerKey;
     }
 
@@ -130,12 +127,10 @@ public class TaskScheduleService {
         }
     }
 
+    @Value(KEY_ARCHIVE_LOCKER)
     private String archiveLockerKey = null;
 
     private String getArchiveLockerKey() {
-        if (archiveLockerKey == null) {
-            archiveLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_ARCHIVE_LOCKER);
-        }
         return archiveLockerKey;
     }
 

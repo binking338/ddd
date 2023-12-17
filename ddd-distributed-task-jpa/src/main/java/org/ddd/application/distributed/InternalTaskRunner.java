@@ -5,8 +5,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.SystemPropertyUtils;
 
+import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -27,9 +29,15 @@ public class InternalTaskRunner {
     private final TaskRecordJpaRepository taskRecordJpaRepository;
     private final List<Task> tasks;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE)));
-    private Map<Class, Task> taskMap = null;
+    @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE)
+    private int threadPoolsize;
+    private ScheduledThreadPoolExecutor executor = null;
+    @PostConstruct
+    public void init(){
+        executor = new ScheduledThreadPoolExecutor(threadPoolsize);
+    }
 
+    private Map<Class, Task> taskMap = null;
     private Task resolveTask(Class<?> taskClass) {
         if (taskMap == null) {
             taskMap = new HashMap<>();

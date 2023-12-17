@@ -7,6 +7,7 @@ import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.ddd.application.distributed.Locker;
 import org.ddd.domain.event.persistence.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -14,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.SystemPropertyUtils;
 
+import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -43,23 +45,26 @@ public class EventScheduleService {
     private final EventJpaRepository eventJpaRepository;
     private final ArchivedEventJpaRepository archivedEventJpaRepository;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE)));
+    @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE)
+    private int threadPoolsize;
+    private ScheduledThreadPoolExecutor executor = null;
 
+    @PostConstruct
+    public void init(){
+        executor =  new ScheduledThreadPoolExecutor(threadPoolsize);
+    }
+
+    @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
     private String getSvcName() {
-        if (svcName == null) {
-            svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        }
         return svcName;
     }
 
+    @Value(KEY_COMPENSATION_LOCKER)
     private String compensationLockerKey = null;
 
     private String getCompensationLockerKey() {
-        if (compensationLockerKey == null) {
-            compensationLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_COMPENSATION_LOCKER);
-        }
         return compensationLockerKey;
     }
 
@@ -140,12 +145,10 @@ public class EventScheduleService {
         }
     }
 
+    @Value(KEY_ARCHIVE_LOCKER)
     private String archiveLockerKey = null;
 
     private String getArchiveLockerKey() {
-        if (archiveLockerKey == null) {
-            archiveLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_ARCHIVE_LOCKER);
-        }
         return archiveLockerKey;
     }
 

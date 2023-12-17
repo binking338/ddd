@@ -3,14 +3,16 @@ package org.ddd.application.distributed;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.Saga;
+import org.ddd.application.distributed.persistence.SagaJpaRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
+
+import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 
 /**
  * @author <template/>
@@ -20,6 +22,11 @@ import java.util.stream.Collectors;
 public class SagaSupervisor {
     private Map<Class, List<SagaStateMachine>> sagaStateMachineContextClassMap;
     private Map<String, SagaStateMachine> sagaStateMachineBizTypeMap;
+
+    @Value(CONFIG_KEY_4_SVC_NAME)
+    protected String svcName;
+    @Autowired
+    private SagaJpaRepository sagaJpaRepository;
 
     public SagaSupervisor(List<SagaStateMachine> sagaStateMachineContextClassMap) {
         if (sagaStateMachineContextClassMap != null && !sagaStateMachineContextClassMap.isEmpty()) {
@@ -74,7 +81,7 @@ public class SagaSupervisor {
         if (!this.sagaStateMachineContextClassMap.containsKey(context.getClass())) {
             throw new IllegalArgumentException("context 传入参数不支持: " + context.getClass().getName());
         }
-        if(this.sagaStateMachineContextClassMap.get(context.getClass()).size() != 1){
+        if (this.sagaStateMachineContextClassMap.get(context.getClass()).size() != 1) {
             throw new IllegalArgumentException("存在多个saga流程支持该context类型: " + context.getClass().getName());
         }
         SagaStateMachine<Context> sagaStateMachine = sagaStateMachineContextClassMap.get(context.getClass()).get(0);
@@ -89,7 +96,7 @@ public class SagaSupervisor {
      * @param context
      * @return
      */
-    public Saga run(String bizType, Object context){
+    public Saga run(String bizType, Object context) {
         return run(bizType, context, true, null);
     }
 
@@ -104,12 +111,29 @@ public class SagaSupervisor {
      */
     public Saga run(String bizType, Object context, boolean runImmediately, String uuid) {
         Assert.notNull(context, "context 参数不得为空");
-        if(!this.sagaStateMachineBizTypeMap.containsKey(bizType)){
-            throw new IllegalArgumentException("bizType 传入参数不支持: "+ bizType);
+        if (!this.sagaStateMachineBizTypeMap.containsKey(bizType)) {
+            throw new IllegalArgumentException("bizType 传入参数不支持: " + bizType);
         }
         SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(bizType);
         Saga saga = sagaStateMachine.run(context, runImmediately, uuid);
         return saga;
+    }
+
+    /**
+     * 查询Saga
+     *
+     * @param uuid
+     * @return
+     */
+    public Saga query(String uuid) {
+        Optional<Saga> saga = sagaJpaRepository.findOne(((root, query, cb) -> {
+            query.where(cb.and(
+                    cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
+                    cb.equal(root.get(Saga.F_SVC_NAME), svcName)
+            ));
+            return null;
+        }));
+        return saga.orElse(null);
     }
 
 

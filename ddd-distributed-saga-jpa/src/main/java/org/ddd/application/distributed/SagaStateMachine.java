@@ -2,7 +2,6 @@ package org.ddd.application.distributed;
 
 import com.alibaba.fastjson.JSON;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -13,6 +12,7 @@ import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.ddd.share.annotation.Retry;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.SystemPropertyUtils;
 
 import javax.annotation.PostConstruct;
@@ -33,12 +33,12 @@ public abstract class SagaStateMachine<Context> {
     @Autowired
     private SagaJpaRepository sagaJpaRepository;
 
+    @Value(CONFIG_KEY_4_SVC_NAME)
     protected String svcName;
     protected Process<Context> process;
 
     @PostConstruct
     public void init() {
-        this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
         this.process = config();
     }
 
@@ -194,7 +194,7 @@ public abstract class SagaStateMachine<Context> {
         }
     }
 
-    protected Optional<Saga> getByUuid(String uuid){
+    public Optional<Saga> queryByUuid(String uuid){
         Optional<Saga> saga = sagaJpaRepository.findOne(((root, query, cb) -> {
             query.where(cb.and(
                     cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
@@ -226,7 +226,7 @@ public abstract class SagaStateMachine<Context> {
      */
     public Saga run(Context context, boolean runImmediately, String uuid) {
         if(StringUtils.isNotBlank(uuid)){
-            Saga existSaga = getByUuid(uuid).orElse(null);
+            Saga existSaga = queryByUuid(uuid).orElse(null);
             if (existSaga != null) {
                 log.warn("Saga已提交，勿重复提交: " + uuid);
                 return existSaga;
@@ -251,7 +251,7 @@ public abstract class SagaStateMachine<Context> {
      * @return
      */
     public Saga beginResume(String uuid, LocalDateTime now) {
-        Saga saga = getByUuid(uuid)
+        Saga saga = queryByUuid(uuid)
                 .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
         return beginResume(saga, now);
     }
@@ -283,7 +283,7 @@ public abstract class SagaStateMachine<Context> {
      * @return
      */
     public Saga resume(String uuid, LocalDateTime now) {
-        Saga saga = getByUuid(uuid)
+        Saga saga = queryByUuid(uuid)
                 .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
         return resume(saga);
     }
@@ -401,7 +401,7 @@ public abstract class SagaStateMachine<Context> {
      * @return
      */
     public Saga beginRollback(String uuid, LocalDateTime now) {
-        Saga saga = getByUuid(uuid)
+        Saga saga = queryByUuid(uuid)
                 .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
         return beginRollback(saga, now);
     }
@@ -430,7 +430,7 @@ public abstract class SagaStateMachine<Context> {
      * @return
      */
     public Saga rollback(String uuid) {
-        Saga saga = getByUuid(uuid)
+        Saga saga = queryByUuid(uuid)
                 .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
         return rollback(saga);
     }

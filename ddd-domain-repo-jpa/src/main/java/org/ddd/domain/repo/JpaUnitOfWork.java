@@ -7,6 +7,7 @@ import org.ddd.domain.event.*;
 import org.ddd.domain.event.annotation.DomainEvent;
 import org.ddd.share.DomainException;
 import org.hibernate.engine.spi.SessionImplementor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -345,14 +346,12 @@ public class JpaUnitOfWork implements UnitOfWork {
         }
     }
 
+    @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
     protected void publishTransactionEvent(List<Object> eventPayloads) {
         List<Object> persistedEvents = new ArrayList<>(eventPayloads.size());
         List<Object> transientEvents = new ArrayList<>(eventPayloads.size());
-        if (this.svcName == null) {
-            this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        }
         for (Object eventPayload : eventPayloads) {
             EventRecord event = eventRecordRepository.create();
             event.init(eventPayload, this.svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);

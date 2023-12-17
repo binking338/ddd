@@ -10,6 +10,7 @@ import org.ddd.application.distributed.persistence.ArchivedSaga;
 import org.ddd.application.distributed.persistence.ArchivedSagaJpaRepository;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.ddd.application.distributed.persistence.Saga;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -47,21 +48,17 @@ public class SagaScheduleService {
 
     private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Integer.parseInt(SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE)));
 
+    @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
     private String getSvcName() {
-        if (svcName == null) {
-            svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        }
         return svcName;
     }
 
+    @Value(KEY_COMPENSATION_LOCKER)
     private String compensationLockerKey = null;
 
     private String getCompensationLockerKey() {
-        if (compensationLockerKey == null) {
-            compensationLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_COMPENSATION_LOCKER);
-        }
         return compensationLockerKey;
     }
 
@@ -136,12 +133,10 @@ public class SagaScheduleService {
         }
     }
 
+    @Value(KEY_ROLLBACK_LOCKER)
     private String rollbackLockerKey = null;
 
     private String getRollbackLockerKey() {
-        if (rollbackLockerKey == null) {
-            rollbackLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_ROLLBACK_LOCKER);
-        }
         return rollbackLockerKey;
     }
 
@@ -219,12 +214,10 @@ public class SagaScheduleService {
         }
     }
 
+    @Value(KEY_ARCHIVE_LOCKER)
     private String archiveLockerKey = null;
 
     private String getArchiveLockerKey() {
-        if (archiveLockerKey == null) {
-            archiveLockerKey = SystemPropertyUtils.resolvePlaceholders(KEY_ARCHIVE_LOCKER);
-        }
         return archiveLockerKey;
     }
     /**

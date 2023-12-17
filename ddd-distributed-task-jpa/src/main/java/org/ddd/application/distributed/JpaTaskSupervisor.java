@@ -5,10 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.SystemPropertyUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 
@@ -22,12 +24,10 @@ public class JpaTaskSupervisor implements TaskSupervisor {
     private final TaskRecordJpaRepository taskRecordJpaRepository;
     private final InternalTaskRunner internalTaskRunner;
 
+    @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName;
 
     private String getSvcName() {
-        if (this.svcName == null) {
-            this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        }
         return this.svcName;
     }
 
@@ -42,6 +42,19 @@ public class JpaTaskSupervisor implements TaskSupervisor {
             return null;
         });
         return count > 0;
+    }
+
+    private Optional<TaskRecord> queryTaskRecord(String uuid){
+        Optional<TaskRecord> taskRecord = taskRecordJpaRepository.findOne((root, query, cb) -> {
+            query.where(
+                    cb.and(
+                            cb.equal(root.get(TaskRecord.F_TASK_UUID), uuid),
+                            cb.equal(root.get(TaskRecord.F_SVC_NAME), getSvcName())
+                    )
+            );
+            return null;
+        });
+        return taskRecord;
     }
 
     @Override
@@ -79,5 +92,10 @@ public class JpaTaskSupervisor implements TaskSupervisor {
             taskRecordJpaRepository.save(taskRecord);
         }
         return true;
+    }
+
+    @Override
+    public TaskRecord query(String uuid) {
+        return queryTaskRecord(uuid).orElse(null);
     }
 }

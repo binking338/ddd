@@ -7,6 +7,7 @@ import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.share.DomainException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.SystemPropertyUtils;
@@ -25,7 +26,8 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
     private final RocketMqDomainEventSubscriberManager rocketMqDomainEventSubscriberManager;
     private final RocketMQTemplate rocketMQTemplate;
     private final EventRecordRepository eventRecordRepository;
-    private final String svcName;
+    @Value(CONFIG_KEY_4_SVC_NAME)
+    private String svcName;
 
     /**
      * 如下配置需配置好，保障RocketMqTemplate被初始化
@@ -46,7 +48,6 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         this.rocketMqDomainEventSubscriberManager = rocketMqDomainEventSubscriberManager;
         this.rocketMQTemplate = rocketMQTemplate;
         this.eventRecordRepository = eventRecordRepository;
-        this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

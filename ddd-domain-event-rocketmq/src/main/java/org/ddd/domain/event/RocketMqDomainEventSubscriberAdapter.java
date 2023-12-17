@@ -13,8 +13,10 @@ import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.ddd.domain.event.annotation.DomainEvent;
 import org.ddd.share.ScanUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.SystemPropertyUtils;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -36,15 +38,16 @@ public class RocketMqDomainEventSubscriberAdapter {
     private final RocketMqDomainEventSubscriberManager rocketMqDomainEventSubscriberManager;
 
     List<MQPushConsumer> mqPushConsumers = new ArrayList<>();
+    @Value(CONFIG_KEY_4_SVC_NAME)
     String applicationName = null;
+    @Value(CONFIG_KEY_4_ROCKETMQ_NAMESVC)
     String defaultNameSrv = null;
+    @Value(CONFIG_KEY_4_DOMAIN_EVENT_SUB_PACKAGE)
+    String scanPath = null;
 
+    @PostConstruct
     public void init() {
-        applicationName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
-        defaultNameSrv = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_ROCKETMQ_NAMESVC);
-        String scanPackage = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_DOMAIN_EVENT_SUB_PACKAGE);
-
-        Set<Class<?>> classes = ScanUtils.scanClass(scanPackage, true);
+        Set<Class<?>> classes = ScanUtils.scanClass(scanPath, true);
         classes.stream().filter(cls -> {
             DomainEvent domainEvent = cls.getAnnotation(DomainEvent.class);
             if (!Objects.isNull(domainEvent) && StringUtils.isNotEmpty(domainEvent.value())

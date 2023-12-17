@@ -1,5 +1,7 @@
 package org.ddd.application.distributed;
 
+import org.ddd.application.distributed.persistence.TaskRecord;
+
 import java.time.Duration;
 
 /**
@@ -35,4 +37,10 @@ public interface TaskSupervisor {
      */
     <Param, Result, T extends Task<Param, Result>> boolean delay(Class<T> taskClass, Param param, String uuid, java.time.Duration delay, java.time.Duration expire, int retryTimes);
 
+    /**
+     * 查询任务
+     * @param uuid
+     * @return
+     */
+    TaskRecord query(String uuid);
 }
