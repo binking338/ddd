@@ -3,15 +3,13 @@ package org.ddd.domain.repo;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ddd.domain.event.DomainEventSupervisor;
-import org.ddd.domain.event.DomainEventPublisher;
-import org.ddd.domain.event.EventRecordRepository;
-import org.ddd.domain.event.EventRecord;
+import org.ddd.domain.event.*;
+import org.ddd.domain.event.annotation.DomainEvent;
 import org.ddd.share.DomainException;
 import org.hibernate.engine.spi.SessionImplementor;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
+import org.springframework.context.event.EventListener;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -41,6 +39,7 @@ public class JpaUnitOfWork implements UnitOfWork {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final DomainEventSupervisor domainEventSupervisor;
     private final DomainEventPublisher domainEventPublisher;
+    private final DomainEventSubscriberManager domainEventSubscriberManager;
     private final EventRecordRepository eventRecordRepository;
     private final JpaSpecificationManager jpaSpecificationManager;
 
@@ -137,7 +136,8 @@ public class JpaUnitOfWork implements UnitOfWork {
                     }
                 }
             }
-            publishTransactionCommittedEvent(domainEventSupervisor.getEvents());
+
+            publishTransactionEvent(domainEventSupervisor.getEvents());
             return null;
         }, saveAndDeleteEntityList, propagation);
     }
@@ -326,10 +326,30 @@ public class JpaUnitOfWork implements UnitOfWork {
         }
     }
 
+    /**
+     * UoW事务正在提交事件
+     */
+    public static class TransactionCommitingEvent extends ApplicationEvent {
+        @Getter
+        List<Object> events;
+
+        /**
+         * Create a new {@code ApplicationEvent}.
+         *
+         * @param source the object on which the event initially occurred or with
+         *               which the event is associated (never {@code null})
+         */
+        public TransactionCommitingEvent(Object source, List<Object> events) {
+            super(source);
+            this.events = events;
+        }
+    }
+
     private String svcName = null;
 
-    protected void publishTransactionCommittedEvent(List<Object> eventPayloads) {
+    protected void publishTransactionEvent(List<Object> eventPayloads) {
         List<Object> persistedEvents = new ArrayList<>(eventPayloads.size());
+        List<Object> transientEvents = new ArrayList<>(eventPayloads.size());
         if (this.svcName == null) {
             this.svcName = SystemPropertyUtils.resolvePlaceholders(CONFIG_KEY_4_SVC_NAME);
         }
@@ -337,11 +357,27 @@ public class JpaUnitOfWork implements UnitOfWork {
             EventRecord event = eventRecordRepository.create();
             event.init(eventPayload, this.svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
             event.beginDelivery(LocalDateTime.now());
-            eventRecordRepository.save(event);
-            persistedEvents.add(event);
+            if(subscribeInTransaction(eventPayload)){
+                transientEvents.add(event);
+            } else {
+                eventRecordRepository.save(event);
+                persistedEvents.add(event);
+            }
         }
         domainEventSupervisor.reset();
+        applicationEventPublisher.publishEvent(new TransactionCommitingEvent(this, transientEvents));
         applicationEventPublisher.publishEvent(new TransactionCommittedEvent(this, persistedEvents));
+    }
+
+    public boolean subscribeInTransaction(Object payload){
+        DomainEvent domainEvent = payload == null
+                ? null
+                : payload.getClass().getAnnotation(DomainEvent.class);
+        if (domainEvent != null) {
+            return !domainEvent.forceSubscribeAfterTransaction();
+        } else {
+            return true;
+        }
     }
 
     @TransactionalEventListener(fallbackExecution = true, classes = TransactionCommittedEvent.class)
@@ -350,6 +386,16 @@ public class JpaUnitOfWork implements UnitOfWork {
         if (events != null && !events.isEmpty()) {
             events.forEach(event -> {
                 domainEventPublisher.publish(event);
+            });
+        }
+    }
+
+    @EventListener(classes = TransactionCommitingEvent.class)
+    public void onTransactionCommiting(TransactionCommitingEvent transactionCommitingEvent) {
+        List<Object> events = transactionCommitingEvent.getEvents();
+        if (events != null && !events.isEmpty()) {
+            events.forEach(event -> {
+                domainEventSubscriberManager.trigger(event);
             });
         }
     }

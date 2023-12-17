@@ -159,7 +159,6 @@ public class Event {
     @Override
     public String toString() {
         return JSON.toJSONString(this);
-        //return String.format("id=%d,svcName=%s,eventType=%s,dataType=%s,data=%s", id, svcName, eventType, data, dataType);
     }
 
     @Id

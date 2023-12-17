@@ -75,7 +75,6 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             log.error(String.format("集成事件发布失败: %s", event.toString()), ex);
         }
     }
-
     @Slf4j
     public static class DomainEventSendCallback implements SendCallback {
         private EventRecord event;

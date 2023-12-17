@@ -48,7 +48,7 @@ public class RocketMqDomainEventSubscriberAdapter {
         classes.stream().filter(cls -> {
             DomainEvent domainEvent = cls.getAnnotation(DomainEvent.class);
             if (!Objects.isNull(domainEvent) && StringUtils.isNotEmpty(domainEvent.value())
-                    & !"none".equalsIgnoreCase(domainEvent.subscriber())) {
+                    & !DomainEvent.NONE_SUBSCRIBER.equalsIgnoreCase(domainEvent.subscriber())) {
                 return true;
             } else {
                 return false;

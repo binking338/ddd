@@ -3,6 +3,7 @@ package org.ddd.domain.repo;
 import lombok.RequiredArgsConstructor;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.domain.event.DomainEventPublisher;
+import org.ddd.domain.event.DomainEventSubscriberManager;
 import org.ddd.domain.event.DomainEventSupervisor;
 import org.ddd.domain.event.EventRecordRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,7 @@ public class JpaRepositoryAutoConfiguration {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final DomainEventSupervisor domainEventSupervisor;
     private final DomainEventPublisher domainEventPublisher;
+    private final DomainEventSubscriberManager domainEventSubscriberManager;
     private final EventRecordRepository eventRecordRepository;
 
     @Bean
@@ -34,7 +36,7 @@ public class JpaRepositoryAutoConfiguration {
 
     @Bean
     public JpaUnitOfWork jpaUnitOfWork(JpaSpecificationManager jpaSpecificationManager){
-        JpaUnitOfWork unitOfWork = new JpaUnitOfWork(applicationEventPublisher, domainEventSupervisor, domainEventPublisher, eventRecordRepository, jpaSpecificationManager);
+        JpaUnitOfWork unitOfWork = new JpaUnitOfWork(applicationEventPublisher, domainEventSupervisor, domainEventPublisher, domainEventSubscriberManager, eventRecordRepository, jpaSpecificationManager);
         return unitOfWork;
     }
 
