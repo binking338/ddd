@@ -13,8 +13,6 @@ import org.ddd.share.annotation.Retry;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.SystemPropertyUtils;
-
 import javax.annotation.PostConstruct;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;

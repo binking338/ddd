@@ -1,13 +1,10 @@
 package org.ddd.application.distributed;
 
-import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.SystemPropertyUtils;
-
 import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;

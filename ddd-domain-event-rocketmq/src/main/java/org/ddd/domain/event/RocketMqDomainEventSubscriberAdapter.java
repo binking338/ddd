@@ -13,8 +13,9 @@ import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.ddd.domain.event.annotation.DomainEvent;
 import org.ddd.share.ScanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.SystemPropertyUtils;
+import org.springframework.core.env.Environment;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
@@ -44,6 +45,8 @@ public class RocketMqDomainEventSubscriberAdapter {
     String defaultNameSrv = null;
     @Value(CONFIG_KEY_4_DOMAIN_EVENT_SUB_PACKAGE)
     String scanPath = null;
+    @Autowired
+    Environment environment;
 
     @PostConstruct
     public void init() {
@@ -84,7 +87,7 @@ public class RocketMqDomainEventSubscriberAdapter {
             return null;
         }
         String target = domainEvent.value();
-        target = SystemPropertyUtils.resolvePlaceholders(target);
+        target = environment.resolvePlaceholders(target);
         String topic = target.lastIndexOf(':') > 0 ? target.substring(0, target.lastIndexOf(':')) : target;
         String tag = target.lastIndexOf(':') > 0 ? target.substring(target.lastIndexOf(':') + 1) : "";
 
@@ -122,7 +125,7 @@ public class RocketMqDomainEventSubscriberAdapter {
         if (StringUtils.isBlank(defaultVal)) {
             defaultVal = topic + "-4-" + applicationName;
         }
-        String group = SystemPropertyUtils.resolvePlaceholders("${rocketmq." + topic + ".consumer.group:" + defaultVal + "}");
+        String group = environment.resolvePlaceholders("${rocketmq." + topic + ".consumer.group:" + defaultVal + "}");
         return group;
     }
 
@@ -130,7 +133,7 @@ public class RocketMqDomainEventSubscriberAdapter {
         if (StringUtils.isBlank(defaultVal)) {
             defaultVal = defaultNameSrv;
         }
-        String nameServer = SystemPropertyUtils.resolvePlaceholders("${rocketmq." + topic + ".name-server:" + defaultVal + "}", true);
+        String nameServer = environment.resolvePlaceholders("${rocketmq." + topic + ".name-server:" + defaultVal + "}");
         return nameServer;
     }
 }

@@ -17,8 +17,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.SystemPropertyUtils;
-
 import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;

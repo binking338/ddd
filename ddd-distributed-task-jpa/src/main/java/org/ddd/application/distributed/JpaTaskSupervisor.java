@@ -6,8 +6,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.SystemPropertyUtils;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;

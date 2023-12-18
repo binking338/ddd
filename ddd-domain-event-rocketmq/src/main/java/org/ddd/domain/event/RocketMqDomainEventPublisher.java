@@ -8,9 +8,9 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.share.DomainException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.SystemPropertyUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -28,6 +28,9 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
     private final EventRecordRepository eventRecordRepository;
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName;
+
+    @Autowired
+    Environment environment;
 
     /**
      * 如下配置需配置好，保障RocketMqTemplate被初始化
@@ -64,7 +67,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         }
         try {
             String destination = event.getEventType();
-            destination = SystemPropertyUtils.resolvePlaceholders(destination);
+            destination = environment.resolvePlaceholders(destination);
             if (destination != null && !destination.isEmpty()) {
                 rocketMQTemplate.asyncSend(destination, event.getPayload(), new DomainEventSendCallback(event, eventRecordRepository));
             } else {
