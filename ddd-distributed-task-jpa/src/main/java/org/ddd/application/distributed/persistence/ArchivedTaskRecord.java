@@ -51,6 +51,13 @@ public class ArchivedTaskRecord {
     private String taskUuid;
 
     /**
+     * 拷贝任务uuid
+     * varchar(64)
+     */
+    @Column(name = "`copy_from`")
+    private String copyFrom;
+
+    /**
      * 服务
      * varchar
      */

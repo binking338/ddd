@@ -1,6 +1,7 @@
 CREATE TABLE `__task` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
                           `task_uuid` varchar(64) NOT NULL DEFAULT '',
+                          `copy_from` varchar(64) NOT NULL DEFAULT '',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `task_type` varchar(255) NOT NULL DEFAULT '',
                           `data` text,
@@ -24,6 +25,7 @@ CREATE TABLE `__task` (
                           UNIQUE KEY `uniq_task_uuid` (`task_uuid`
                               -- , `db_created_at`
                               ),
+                          KEY `idx_copy_from` (`copy_from`),
                           KEY `idx_next_try_time` (`next_try_time`,`task_state`,`svc_name`,`task_type`),
                           KEY `idx_expire_at` (`expire_at`),
                           KEY `idx_create_at` (`create_at`),
@@ -37,6 +39,7 @@ CREATE TABLE `__task` (
 CREATE TABLE `__archived_task` (
                           `id` bigint(20) NOT NULL AUTO_INCREMENT,
                           `task_uuid` varchar(64) NOT NULL DEFAULT '',
+                          `copy_from` varchar(64) NOT NULL DEFAULT '',
                           `svc_name` varchar(255) NOT NULL DEFAULT '',
                           `task_type` varchar(255) NOT NULL DEFAULT '',
                           `data` text,
@@ -60,6 +63,7 @@ CREATE TABLE `__archived_task` (
                           UNIQUE KEY `uniq_task_uuid` (`task_uuid`
                               -- , `db_created_at`
                               ),
+                          KEY `idx_copy_from` (`copy_from`),
                           KEY `idx_next_try_time` (`next_try_time`,`task_state`,`svc_name`,`task_type`),
                           KEY `idx_expire_at` (`expire_at`),
                           KEY `idx_create_at` (`create_at`),

@@ -1,10 +1,12 @@
 package org.ddd.application.distributed;
 
+import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
+
 import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -29,12 +31,14 @@ public class InternalTaskRunner {
     @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE)
     private int threadPoolsize;
     private ScheduledThreadPoolExecutor executor = null;
+
     @PostConstruct
-    public void init(){
+    public void init() {
         executor = new ScheduledThreadPoolExecutor(threadPoolsize);
     }
 
     private Map<Class, Task> taskMap = null;
+
     private Task resolveTask(Class<?> taskClass) {
         if (taskMap == null) {
             taskMap = new HashMap<>();
@@ -46,21 +50,23 @@ public class InternalTaskRunner {
     }
 
     public void run(TaskRecord taskRecord, Duration delay) {
-        executor.schedule(() -> {
-            log.info("正在执行异步任务: {}", taskRecord.toString());
-            Task task = resolveTask(taskRecord.getTaskClass());
-            Object result = null;
-            try {
-                result = task.process(taskRecord.getParam());
-                task.onSuccess(taskRecord.getParam(), result);
-                taskRecord.confirmedCompeleted(result, LocalDateTime.now());
-                taskRecordJpaRepository.save(taskRecord);
-                log.info("结束执行异步任务: id={}", taskRecord.getId());
-            } catch (Exception ex) {
-                task.onFail(taskRecord.getParam(), ex);
-                log.error("异步任务执行异常", ex);
-            }
-            return result;
-        }, delay.getSeconds(), TimeUnit.SECONDS);
+        executor.schedule(() -> doRun(taskRecord), delay.getSeconds(), TimeUnit.SECONDS);
+    }
+
+    public Object doRun(TaskRecord taskRecord) {
+        log.info("正在执行异步任务: {}", taskRecord.toString());
+        Task task = resolveTask(taskRecord.getTaskClass());
+        Object result = null;
+        try {
+            result = task.process(taskRecord.getParam());
+            task.onSuccess(taskRecord.getParam(), result);
+            taskRecord.confirmedCompeleted(result, LocalDateTime.now());
+            taskRecordJpaRepository.save(taskRecord);
+        } catch (Exception ex) {
+            task.onFail(taskRecord.getParam(), ex);
+            log.error("异步任务执行异常", ex);
+        }
+        log.info("结束执行异步任务: id={} result={}", taskRecord.getId(), JSON.toJSON(result));
+        return result;
     }
 }

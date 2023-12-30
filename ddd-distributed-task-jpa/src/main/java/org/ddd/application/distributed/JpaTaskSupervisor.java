@@ -82,7 +82,7 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         LocalDateTime schedule = now.plusSeconds(delay.getSeconds());
         TaskRecord taskRecord = new TaskRecord();
         taskRecord.init(uuid, taskClass, param, getSvcName(), now, schedule, expire, retryTimes);
-        if (delay.getSeconds() < 60) {
+        if (delay.getSeconds() == 0) {
             taskRecord.beginRun(schedule);
             taskRecord = taskRecordJpaRepository.save(taskRecord);
             internalTaskRunner.run(taskRecord, delay);
@@ -92,8 +92,35 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         return true;
     }
 
-    @Override
     public TaskRecord query(String uuid) {
         return queryTaskRecord(uuid).orElse(null);
+    }
+
+
+    public boolean copyAndRun(String sourceUuid, String uuid){
+        LocalDateTime now = LocalDateTime.now();
+        TaskRecord source = queryTaskRecord(sourceUuid).orElseThrow(() -> new RuntimeException(String.format("不存在的任务 source_uuid = %s", sourceUuid)));
+        TaskRecord taskRecord = TaskRecord.builder().build();
+        taskRecord.initFrom(source, uuid, now);
+        taskRecord.beginRun(now);
+        taskRecord = taskRecordJpaRepository.save(taskRecord);
+        internalTaskRunner.run(taskRecord, Duration.ZERO);
+        return true;
+    }
+
+    public boolean copyAndDelay(String sourceUuid, String uuid, Duration delay){
+        LocalDateTime now = LocalDateTime.now();
+        TaskRecord source = queryTaskRecord(sourceUuid).orElseThrow(() -> new RuntimeException(String.format("不存在的任务 source_uuid = %s", sourceUuid)));
+        TaskRecord taskRecord = TaskRecord.builder().build();
+        LocalDateTime schedule = now.plusSeconds(delay.getSeconds());
+        taskRecord.initFrom(source, uuid, schedule);
+        if (delay.getSeconds() == 0) {
+            taskRecord.beginRun(schedule);
+            taskRecord = taskRecordJpaRepository.save(taskRecord);
+            internalTaskRunner.run(taskRecord, delay);
+        } else {
+            taskRecordJpaRepository.save(taskRecord);
+        }
+        return true;
     }
 }

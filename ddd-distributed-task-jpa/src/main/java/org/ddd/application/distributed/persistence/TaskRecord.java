@@ -34,6 +34,7 @@ import java.util.UUID;
 @Slf4j
 public class TaskRecord {
     public static final String F_TASK_UUID = "taskUuid";
+    public static final String F_COPY_FROM = "copyFrom";
     public static final String F_SVC_NAME = "svcName";
     public static final String F_TASK_TYPE = "taskType";
     public static final String F_DATA = "data";
@@ -48,11 +49,28 @@ public class TaskRecord {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
+    public void initFrom(TaskRecord from, String uuid, LocalDateTime now){
+        this.svcName  = from.getSvcName();
+        this.taskUuid  = StringUtils.isNotBlank(uuid)
+                ? uuid
+                : UUID.randomUUID().toString();
+        this.copyFrom = from.getTaskUuid();
+        this.taskType = from.getTaskType();
+        this.loadParam(from.getParam());
+        this.tryTimes = from.getTryTimes();
+        this.expireAt = now.plusSeconds(Duration.between(from.getCreateAt(), from.getExpireAt()).getSeconds());
+        this.createAt = now;
+        this.taskState = TaskState.INIT;
+        this.triedTimes = 0;
+        this.lastTryTime = LocalDateTime.of(1, 1, 1, 0, 0, 0);
+    }
+
     public void init(String uuid, Class<?> taskClass, Object param, String svcName, LocalDateTime now, LocalDateTime schedule, Duration expireAfter, int retryTimes) {
         this.svcName = svcName;
         this.taskUuid = StringUtils.isNotBlank(uuid)
                 ? uuid
                 : UUID.randomUUID().toString();
+        this.copyFrom = "";
         this.taskType = taskClass.getName();
         this.createAt = now;
         this.taskState = TaskState.INIT;
@@ -187,6 +205,13 @@ public class TaskRecord {
      */
     @Column(name = "`task_uuid`")
     private String taskUuid;
+
+    /**
+     * 拷贝任务uuid
+     * varchar(64)
+     */
+    @Column(name = "`copy_from`")
+    private String copyFrom;
 
     /**
      * 服务

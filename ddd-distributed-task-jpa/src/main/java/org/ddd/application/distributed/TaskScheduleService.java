@@ -57,6 +57,13 @@ public class TaskScheduleService {
     private boolean compensationRunning = false;
     private int compensationDelayMillis = 0;
 
+    /**
+     *
+     * @param batchSize 批量处理任务数量
+     * @param maxConcurrency
+     * @param interval
+     * @param maxLockDuration
+     */
     public void compensation(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
         if (compensationRunning) {
             log.info("异步任务补偿:上次任务补偿仍未结束，跳过");
