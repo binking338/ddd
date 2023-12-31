@@ -1,30 +1,30 @@
 package org.ddd.application.distributed;
 
-import com.alibaba.fastjson.JSON;
-import lombok.Getter;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.annotation.SagaProcess;
+import org.ddd.application.distributed.annotation.SagaRollback;
 import org.ddd.application.distributed.persistence.Saga;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.ddd.share.annotation.Retry;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import javax.annotation.PostConstruct;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.util.StringUtils;
+
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.function.Consumer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 
 /**
- * @author <template/>
- * @date
+ * @author qiaohe
+ * @date 2023/12/30
  */
 @Slf4j
 public abstract class SagaStateMachine<Context> {
@@ -33,11 +33,93 @@ public abstract class SagaStateMachine<Context> {
 
     @Value(CONFIG_KEY_4_SVC_NAME)
     protected String svcName;
-    protected Process<Context> process;
 
-    @PostConstruct
-    public void init() {
-        this.process = config();
+    private Optional<Saga> querySaga(String uuid) {
+        Optional<Saga> saga = sagaJpaRepository.findAll((root, query, cb) -> {
+            query.where(
+                    cb.and(
+                            cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
+                            cb.equal(root.get(Saga.F_SVC_NAME), svcName)
+                    )
+            );
+            return null;
+        }, PageRequest.of(0, 1)).stream().findFirst();
+        return saga;
+    }
+
+    public Saga init(Context context, String uuid) {
+        if(!StringUtils.isEmpty(uuid)) {
+            Saga saga = querySaga(uuid).orElse(null);
+            if(saga!=null){
+                return saga;
+            }
+        }
+        Saga saga = Saga.builder().build();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextTryTime = getNextTryTime(now, 0);
+        saga.init(now, svcName, getBizType(), context, uuid, nextTryTime, expireInSeconds(), retryTimes(), new ArrayList<>());
+        SagaWrapper sagaWrapper = new SagaWrapper();
+        sagaWrapper.setSaga(saga);
+        sagaWrapper.saveAndFlush(sagaJpaRepository);
+        saga.startRunning(now, nextTryTime);
+        return sagaWrapper.getSaga();
+    }
+
+    public Saga holdState4Run(Saga saga, LocalDateTime time) {
+        LocalDateTime now = time;
+        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
+        if(saga.startRunning(now, nextTryTime)) {
+            SagaWrapper sagaWrapper = new SagaWrapper();
+            sagaWrapper.setSaga(saga);
+            sagaWrapper.saveAndFlush(sagaJpaRepository);
+            return sagaWrapper.getSaga();
+        } else {
+            return saga;
+        }
+    }
+
+
+    public Saga run(Saga saga) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
+        if(saga.startRunning(now, nextTryTime)) {
+            SagaWrapper sagaWrapper = new SagaWrapper();
+            sagaWrapper.setSaga(saga);
+            sagaWrapper.saveAndFlush(sagaJpaRepository);
+            configProcess((Context) saga.getContext(), sagaWrapper);
+            sagaWrapper.getSaga().finishRunning();
+            sagaWrapper.saveAndFlush(sagaJpaRepository);
+            return sagaWrapper.getSaga();
+        } else {
+            return saga;
+        }
+    }
+
+    public Saga holdState4Rollback(Saga saga, LocalDateTime time) {
+        LocalDateTime now = time;
+        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
+        if(saga.startRollback(now, nextTryTime)) {
+            SagaWrapper sagaWrapper = new SagaWrapper();
+            sagaWrapper.setSaga(saga);
+            sagaWrapper.saveAndFlush(sagaJpaRepository);
+            return sagaWrapper.getSaga();
+        } else {
+            return saga;
+        }
+    }
+
+    public Saga rollback(Saga saga) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
+        if(saga.startRollback(now, nextTryTime)) {
+            SagaWrapper sagaWrapper = new SagaWrapper();
+            sagaWrapper.setSaga(saga);
+            configRollback(sagaWrapper);
+            sagaWrapper.getSaga().finishRollback();
+            return sagaWrapper.getSaga();
+        } else {
+            return saga;
+        }
     }
 
     /**
@@ -45,7 +127,7 @@ public abstract class SagaStateMachine<Context> {
      *
      * @return
      */
-    protected String getBizType(){
+    protected String getBizType() {
         return this.getClass().getName();
     }
 
@@ -57,7 +139,7 @@ public abstract class SagaStateMachine<Context> {
     protected abstract Class<Context> getContextClass();
 
     /**
-     * 事务过期时长, (单位：分)
+     * 事务过期时长, (单位：秒)
      *
      * @return
      */
@@ -86,10 +168,11 @@ public abstract class SagaStateMachine<Context> {
     /**
      * 获取下次尝试间隔时间（单位：秒）
      *
+     * @param now
      * @param triedTimes 输入 >= 0
      * @return
      */
-    protected int getNextTryIdleInSeconds(int triedTimes) {
+    protected LocalDateTime getNextTryTime(LocalDateTime now, int triedTimes) {
         Retry retry = this.getClass().getAnnotation(Retry.class);
         if (retry != null && retry.retryIntervals() != null && retry.retryIntervals().length > 0) {
             int index = triedTimes - 1;
@@ -98,612 +181,181 @@ public abstract class SagaStateMachine<Context> {
             } else if (index < 0) {
                 index = 0;
             }
-            return retry.retryIntervals()[index];
+            return now.plusSeconds(retry.retryIntervals()[index]);
         }
-        return 600;
+        return now.plusSeconds(600);
     }
 
-    /**
-     * 配置saga流程
-     *
-     * @return
-     */
-    protected Process<Context> config() {
-        Object sagaStateMachine = this;
+    protected void configProcess(Context context, SagaWrapper saga) {
         Class clazz = this.getClass();
-        Process<Context> process = null;
         List<Method> sagaProcessMethods = Arrays.stream(clazz.getDeclaredMethods())
                 .filter(m -> m.getAnnotation(SagaProcess.class) != null)
+                .sorted((m1, m2) -> m1.getAnnotation(SagaProcess.class).code() - m2.getAnnotation(SagaProcess.class).code())
                 .collect(Collectors.toList());
         if (sagaProcessMethods.size() == 0) {
             log.error("SAGA type=[" + clazz.getTypeName() + "]没有声明任何SagaProcess方法！");
             throw new RuntimeException("没有声明任何SagaProcess方法！");
         }
-        List<Method> startSagaProcessMethods = sagaProcessMethods.stream()
-                .filter(m -> {
-                    SagaProcess annotation = m.getAnnotation(SagaProcess.class);
-                    return StringUtils.isEmpty(annotation.parent()) && StringUtils.isEmpty(annotation.preview());
-                })
+        Object input = null;
+        Object output = null;
+        for (Method method : sagaProcessMethods) {
+            output = process(method, input, saga);
+            input = output;
+        }
+    }
+
+    protected void configRollback(SagaWrapper saga) {
+        Class clazz = this.getClass();
+        List<Method> sagaProcessMethods = Arrays.stream(clazz.getDeclaredMethods())
+                .filter(m -> m.getAnnotation(SagaRollback.class) != null)
+                .sorted((m1, m2) -> m1.getAnnotation(SagaProcess.class).code() - m2.getAnnotation(SagaProcess.class).code())
                 .collect(Collectors.toList());
-        if (startSagaProcessMethods.size() == 0) {
-            log.error("SAGA type=[" + clazz.getTypeName() + "]没有声明起始SagaProcess方法！");
-            throw new RuntimeException("没有声明起始SagaProcess方法！");
-        } else if (startSagaProcessMethods.size() == 1) {
-            process = transformProcess(startSagaProcessMethods.get(0), sagaProcessMethods, sagaStateMachine);
+        if (sagaProcessMethods.size() == 0) {
+            return;
+        }
+        for (Method method : sagaProcessMethods) {
+            if (!rollback(method, saga)) {
+                return;
+            }
+        }
+        saga.getSaga().finishRollback();
+        saga.saveAndFlush(sagaJpaRepository);
+    }
+
+
+    protected <Input, Output> Output process(ProcessHandler<Input, Output, Context> handler, Input input, int code, String name, SagaWrapper saga) {
+        Saga.SagaProcess process = saga.getSaga().findProcess(code);
+        LocalDateTime now = LocalDateTime.now();
+        if (process == null) {
+            process = Saga.SagaProcess.builder().build();
+            process.init(now, code, name);
+            process.startRunning(now, input);
+            saga.getSaga().addProcess(process);
+            saga.saveAndFlush(sagaJpaRepository);
         } else {
-            startSagaProcessMethods.sort(this::sagaCompare);
-            Process<Context> currentProcess = null;
-            for (Method m : startSagaProcessMethods) {
-                if (currentProcess == null) {
-                    currentProcess = transformProcess(m, sagaProcessMethods, sagaStateMachine);
-                    process = currentProcess;
+            if (Saga.SagaState.DONE.equals(process.getProcessState())) {
+                return (Output) process.getOutput();
+            } else {
+                process.startRunning(now, input);
+                saga.saveAndFlush(sagaJpaRepository);
+            }
+        }
+        Output output = null;
+        try {
+            output = handler.process(input, (Context) saga.getSaga().getContext());
+            process.finishRunning(output);
+            saga.saveAndFlush(sagaJpaRepository);
+        } catch (Exception ex) {
+            process.fail(ex);
+            saga.saveAndFlush(sagaJpaRepository);
+        }
+        return output;
+    }
+
+    protected <Input, Output> boolean rollback(RollbackHandler<Input, Output, Context> handler, int code, SagaWrapper saga) {
+        Saga.SagaProcess process = saga.getSaga().findProcess(code);
+        if (process == null) {
+            return false;
+        } else if (Saga.SagaState.ROLLBACKED.equals(process.getProcessState())) {
+            return true;
+        } else {
+            process.startRollback();
+            saga.saveAndFlush(sagaJpaRepository);
+        }
+        Context context = (Context) saga.getSaga().getContext();
+        try {
+            handler.rollback((Input) process.getInput(), (Output) process.getOutput(), context);
+            process.finishRollback();
+            saga.saveAndFlush(sagaJpaRepository);
+        } catch (Exception ex) {
+            process.fail(ex);
+            saga.saveAndFlush(sagaJpaRepository);
+            return false;
+        }
+        return true;
+    }
+
+    protected <Input, Output> boolean rollback(Method method, SagaWrapper saga) {
+        SagaRollback annotation = method.getAnnotation(SagaRollback.class);
+        Object _this = this;
+
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        RollbackHandler<Input, Output, Context> handler = (i, o, c) -> {
+            Object[] params = null;
+            if (parameterTypes.length == 0) {
+                params = new Object[0];
+            } else if (parameterTypes.length == 1) {
+                if (c != null && c.getClass().equals(parameterTypes[0])) {
+                    params = new Object[]{c};
+                } else if (i != null && i.getClass().equals(parameterTypes[0])) {
+                    params = new Object[]{i};
+                } else if (o != null && o.getClass().equals(parameterTypes[0])) {
+                    params = new Object[]{o};
                 } else {
-                    currentProcess.addSub(transformProcess(m, sagaProcessMethods, sagaStateMachine));
+                    params = new Object[]{null};
                 }
+            } else if (parameterTypes.length == 2) {
+                params = new Object[]{i, o};
+            } else if (parameterTypes.length == 3) {
+                params = new Object[]{i, o, c};
             }
-        }
-        return process;
-    }
-
-    protected Process<Context> transformProcess(Method processMethod, List<Method> allSagaProcessMethods, Object sagaStateMachine) {
-        SagaProcess anno = processMethod.getAnnotation(SagaProcess.class);
-        String processName = StringUtils.isNotEmpty(anno.name()) ? anno.name() : processMethod.getName();
-        Process<Context> process = Process.of(anno.code(), processName, context -> {
+            boolean result = false;
             try {
-                processMethod.invoke(sagaStateMachine, context);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+                result = (boolean) method.invoke(_this, params);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
             }
-        });
-        List<Method> subProcessMethods = allSagaProcessMethods.stream()
-                .filter(m -> {
-                    SagaProcess annoSub = m.getAnnotation(SagaProcess.class);
-                    return StringUtils.equals(annoSub.parent(), processName);
-                })
-                .collect(Collectors.toList());
-
-        subProcessMethods.sort(this::sagaCompare);
-        for (Method subProcessMethod : subProcessMethods) {
-            process.addSub(transformProcess(subProcessMethod, allSagaProcessMethods, sagaStateMachine));
-        }
-        Method nextProcessMethod = allSagaProcessMethods.stream()
-                .filter(m -> {
-                    SagaProcess annoNext = m.getAnnotation(SagaProcess.class);
-                    return StringUtils.equals(annoNext.preview(), processName);
-                })
-                .findFirst()
-                .orElse(null);
-        if (nextProcessMethod != null) {
-            process.then(transformProcess(nextProcessMethod, allSagaProcessMethods, sagaStateMachine));
-        }
-        return process;
+            return result;
+        };
+        return rollback(handler, annotation.code(), saga);
     }
 
-    protected Integer sagaCompare(Method a, Method b) {
-        SagaProcess annoA = a.getAnnotation(SagaProcess.class);
-        SagaProcess annoB = b.getAnnotation(SagaProcess.class);
-        int codeComp = Integer.compare(annoA.code(), annoB.code());
-        if (codeComp != 0) {
-            return codeComp;
-        } else {
-            String processAName = StringUtils.isNotEmpty(annoA.name()) ? annoA.name() : a.getName();
-            String processBName = StringUtils.isNotEmpty(annoB.name()) ? annoB.name() : b.getName();
-            return StringUtils.compare(processAName, processBName);
-        }
-    }
+    protected <Input, Output> Output process(Method method, Input input, SagaWrapper saga) {
+        SagaProcess annotation = method.getAnnotation(SagaProcess.class);
+        Object _this = this;
 
-    public Optional<Saga> queryByUuid(String uuid){
-        Optional<Saga> saga = sagaJpaRepository.findOne(((root, query, cb) -> {
-            query.where(cb.and(
-                    cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
-                    cb.equal(root.get(Saga.F_BIZ_TYPE), getBizType()),
-                    cb.equal(root.get(Saga.F_SVC_NAME), svcName)
-            ));
-            return null;
-        }));
-        return saga;
-    }
-
-    /**
-     * 创建saga流程
-     *
-     * @param context
-     * @return saga
-     */
-    public Saga run(Context context) {
-        return run(context, true, null);
-    }
-
-    /**
-     * 创建并执行saga流程
-     *
-     * @param context
-     * @param runImmediately
-     * @param uuid
-     * @return
-     */
-    public Saga run(Context context, boolean runImmediately, String uuid) {
-        if(StringUtils.isNotBlank(uuid)){
-            Saga existSaga = queryByUuid(uuid).orElse(null);
-            if (existSaga != null) {
-                log.warn("Saga已提交，勿重复提交: " + uuid);
-                return existSaga;
-            }
-        }
-        Saga saga = build(context, runImmediately, uuid);
-        if (runImmediately) {
-            LocalDateTime now = LocalDateTime.now();
-            saga = beginResume(saga, now);
-            saga = resume(saga);
-        } else {
-            saga = sagaJpaRepository.saveAndFlush(saga);
-        }
-        return saga;
-    }
-
-    /**
-     * 开始复原saga流程
-     *
-     * @param uuid
-     * @param now
-     * @return
-     */
-    public Saga beginResume(String uuid, LocalDateTime now) {
-        Saga saga = queryByUuid(uuid)
-                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
-        return beginResume(saga, now);
-    }
-
-    /**
-     * 开始复原saga流程
-     *
-     * @param saga
-     * @param now
-     * @return
-     */
-    public Saga beginResume(Saga saga, LocalDateTime now) {
-        boolean started = saga.startRunning(now, now.plusSeconds(getNextTryIdleInSeconds(saga.getTriedTimes())));
-        if (!started) {
-            if (Saga.SagaState.EXPIRED.equals(saga.getSagaState()) || Saga.SagaState.FAILED.equals(saga.getSagaState())) {
-                saga = sagaJpaRepository.saveAndFlush(saga);
-                return saga;
-            }
-        }
-        saga = sagaJpaRepository.saveAndFlush(saga);
-        return saga;
-    }
-
-    /**
-     * 复原saga流程
-     *
-     * @param uuid
-     * @param now
-     * @return
-     */
-    public Saga resume(String uuid, LocalDateTime now) {
-        Saga saga = queryByUuid(uuid)
-                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
-        return resume(saga);
-    }
-
-    /**
-     * 复原saga流程
-     *
-     * @param saga
-     * @return
-     */
-    public Saga resume(Saga saga) {
-        if (!this.getBizType().equals(saga.getBizType())) {
-            log.error("bizType不匹配 sagaId=" + saga.getId());
-            return null;
-        }
-        if (!Saga.SagaState.RUNNING.equals(saga.getSagaState())) {
-            log.error("运行中的saga才可以复原 sagaId=" + saga.getId());
-            return null;
-        }
-        Context context = JSON.parseObject(saga.getContextData(), getContextClass());
-        saga = internalRun(saga, context, process);
-        if (saga.getProcesses().stream().anyMatch(p -> !Saga.SagaState.DONE.equals(p.getProcessState()))) {
-            return saga;
-        }
-        saga.finishRunning(context);
-        saga = sagaJpaRepository.saveAndFlush(saga);
-        return saga;
-    }
-
-    /**
-     * @param context
-     * @param runningState
-     * @param uuid
-     * @return
-     */
-    protected Saga build(Context context, boolean runningState, String uuid) {
-        // 持久化
-        LocalDateTime now = LocalDateTime.now();
-        List<Saga.SagaProcess> sagaProcesses = process.flattenProcessList().stream().map(p -> {
-            Saga.SagaProcess sagaProcess = new Saga.SagaProcess();
-            sagaProcess.init(now, p.code, p.name);
-            return sagaProcess;
-        }).collect(Collectors.toList());
-        Saga saga = new Saga();
-        LocalDateTime nextTryTime = runningState ? now.plusSeconds(getNextTryIdleInSeconds(0)) : now;
-        saga.init(now, svcName, getBizType(), context, uuid, nextTryTime, expireInSeconds(), retryTimes(), sagaProcesses);
-        return saga;
-    }
-
-    protected Saga internalRun(Saga saga, Context context, Process<Context> currentProcess) {
-        LocalDateTime now = LocalDateTime.now();
-        // 判断是否能执行
-        if (saga.findProcess(currentProcess.code) == null) {
-            log.error("[Saga Running]saga process丢失 saga_id = " + saga.getId() + " code = " + currentProcess.code);
-            saga.fail(context);
-            saga = sagaJpaRepository.saveAndFlush(saga);
-            return saga;
-        }
-        try {
-            if (saga.findProcess(currentProcess.code).startRunning(now, context)) {
-                saga = sagaJpaRepository.saveAndFlush(saga);
-                int tryCount = 3;
-                while (tryCount-- > 0) {
-                    try {
-                        currentProcess.process.accept(context);
-                        break;
-                    } catch (Exception e) {
-                        log.error("[Saga Running]saga执行失败 saga = " + saga.toString(), e);
-                        if (tryCount == 0) {
-                            throw e;
-                        }
-                    }
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        ProcessHandler<Input, Output, Context> handler = (Input i, Context c) -> {
+            Object[] params = null;
+            if (parameterTypes.length == 1) {
+                if (c != null && c.getClass().equals(parameterTypes[0])) {
+                    params = new Object[]{c};
+                } else {
+                    params = new Object[]{i};
                 }
-
-                saga.findProcess(currentProcess.code).finishRunning(context);
-                saga = sagaJpaRepository.saveAndFlush(saga);
-            } else if (Saga.SagaState.DONE.equals(saga.findProcess(currentProcess.code).getProcessState())) {
-                Context temp = saga.findProcess(currentProcess.code).getContext(getContextClass());
-                BeanUtils.copyProperties(temp, context);
-            } else {
-                return saga;
-            }
-        } catch (Exception ex) {
-            saga.fail(context);
-            saga.findProcess(currentProcess.code).fail(ex);
-            if (Saga.SagaState.FAILED.equals(saga.getSagaState()) && currentProcess.rollback != null) {
-                saga = beginRollback(saga, now);
-                return saga;
-            }
-            saga = sagaJpaRepository.saveAndFlush(saga);
-            return saga;
-        }
-        // sub processes
-        if (CollectionUtils.isNotEmpty(currentProcess.subProcesses)) {
-            for (int i = 0; i < currentProcess.subProcesses.size(); i++) {
-                Process process = currentProcess.subProcesses.get(i);
-                saga = internalRun(saga, context, process);
-                if (!Saga.SagaState.DONE.equals(saga.findProcess(process.code).getProcessState())) {
-                    return saga;
+            } else if (parameterTypes.length == 2) {
+                if (c != null && c.getClass().equals(parameterTypes[0])) {
+                    params = new Object[]{c, i};
+                } else {
+                    params = new Object[]{i, c};
                 }
             }
-        }
-        // next process
-        if (currentProcess.nextProcess != null) {
-            return internalRun(saga, context, currentProcess.nextProcess);
-        }
-        return saga;
+            Output output = null;
+            try {
+                output = (Output) method.invoke(_this, params);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+            return output;
+        };
+        return process(handler, input, annotation.code(), annotation.name(), saga);
     }
 
-    /**
-     * 开始回滚Saga
-     *
-     * @param uuid
-     * @param now
-     * @return
-     */
-    public Saga beginRollback(String uuid, LocalDateTime now) {
-        Saga saga = queryByUuid(uuid)
-                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
-        return beginRollback(saga, now);
-    }
+    @Data
+    public static class SagaWrapper {
+        Saga saga;
 
-    /**
-     * 开始回滚Saga
-     *
-     * @param saga
-     * @param now
-     * @return
-     */
-    public Saga beginRollback(Saga saga, LocalDateTime now) {
-        if (!this.getBizType().equals(saga.getBizType())) {
-            log.error("bizType不匹配 sagaId=" + saga.getId());
-            return null;
-        }
-        saga.startRollback(now, now.plusSeconds(getNextTryIdleInSeconds(0)));
-        saga = sagaJpaRepository.saveAndFlush(saga);
-        return saga;
-    }
-
-    /**
-     * 回滚saga
-     *
-     * @param uuid
-     * @return
-     */
-    public Saga rollback(String uuid) {
-        Saga saga = queryByUuid(uuid)
-                .orElseThrow(() -> new RuntimeException("[Saga Resume]saga不存在: " + uuid));
-        return rollback(saga);
-    }
-
-    /**
-     *  回滚saga
-     *
-     * @param saga
-     * @return
-     */
-    public Saga rollback(Saga saga) {
-        if (!this.getBizType().equals(saga.getBizType())) {
-            log.error("bizType不匹配 sagaId=" + saga.getId());
-            return null;
-        }
-        Context context = JSON.parseObject(saga.getContextData(), getContextClass());
-        saga = internalRollback(saga, context, process);
-        if (!saga.getProcesses().stream().allMatch(p -> Saga.SagaState.ROLLBACKED.equals(p.getProcessState()) || Saga.SagaState.INIT.equals(p.getProcessState()))) {
-            saga.fail(context);
+        protected void saveAndFlush(SagaJpaRepository sagaJpaRepository) {
+            saga.syncContextData();
             saga = sagaJpaRepository.saveAndFlush(saga);
-            return saga;
-        }
-        saga.finishRollback(context);
-        saga = sagaJpaRepository.saveAndFlush(saga);
-        return saga;
-    }
-
-    protected Saga internalRollback(Saga saga, Context context, Process<Context> currentProcess) {
-        Date now = new Date();
-        // 判断是否能执行
-        if (saga.findProcess(currentProcess.code) == null) {
-            log.error("[Saga Rollback]saga process丢失 saga_id = " + saga.getId() + " code = " + currentProcess.code);
-            saga.fail(context);
-            saga = sagaJpaRepository.saveAndFlush(saga);
-            return saga;
-        }
-        switch (saga.findProcess(currentProcess.code).getProcessState()) {
-            case INIT:
-            case ROLLBACKED:
-                return saga;
-            case RUNNING:
-            case FAILED:
-            case CANCEL:
-            case EXPIRED:
-            case DONE:
-            case ROLLBACKING:
-            default:
-                break;
-        }
-        // next process
-        if (currentProcess.nextProcess != null) {
-            saga = internalRollback(saga, context, currentProcess.nextProcess);
-        }
-
-        // sub processes
-        if (CollectionUtils.isNotEmpty(currentProcess.subProcesses)) {
-            for (int i = currentProcess.subProcesses.size() - 1; i >= 0; i--) {
-                Process process = currentProcess.subProcesses.get(i);
-                saga = internalRollback(saga, context, process);
-                if (!Saga.SagaState.ROLLBACKED.equals(saga.findProcess(process.code).getProcessState())) {
-                    return saga;
-                }
-            }
-        }
-
-        // current
-        try {
-            if (currentProcess.rollback == null) {
-                saga.fail(context);
-                saga.findProcess(currentProcess.code).fail(new NullPointerException("rollback回滚处理缺失"));
-                saga = sagaJpaRepository.saveAndFlush(saga);
-            } else {
-                saga.findProcess(currentProcess.code).startRollback(context);
-                saga = sagaJpaRepository.saveAndFlush(saga);
-
-                currentProcess.rollback.accept(context);
-
-                saga.findProcess(currentProcess.code).finishRollback(context);
-                saga = sagaJpaRepository.saveAndFlush(saga);
-            }
-        } catch (Exception ex) {
-            log.error("[Saga Rollback]saga执行失败 saga = " + saga.toString(), ex);
-            return saga;
-        }
-
-        return saga;
-    }
-
-    public static class Process<Context> {
-
-        protected Process(Integer code, String name, Consumer<Context> process, Consumer<Context> rollback) {
-            this.code = code;
-            this.name = name;
-            this.process = process;
-            this.rollback = rollback;
-        }
-
-        @Getter
-        private Integer code;
-        @Getter
-        private String name;
-
-        /**
-         * 满足幂等性
-         */
-        @Getter
-        private final Consumer<Context> process;
-        /**
-         * 回滚（逆向处理）
-         */
-        @Getter
-        private final Consumer<Context> rollback;
-
-        /**
-         * 根处理环节
-         */
-        private Process<Context> rootProcess;
-
-        /**
-         * 下个处理环节
-         */
-        @Getter
-        private Process<Context> nextProcess;
-
-        /**
-         * 子处理环节
-         */
-        @Getter
-        private List<Process<Context>> subProcesses = new ArrayList<>();
-
-        public List<Process<Context>> getSubProcesses() {
-            return ListUtils.unmodifiableList(subProcesses);
-        }
-
-        public List<Process<Context>> flattenProcessList() {
-            List<Process<Context>> processes = new ArrayList<>();
-            processes.add(this);
-            for (Process<Context> subProcess : subProcesses) {
-                processes.addAll(subProcess.flattenProcessList());
-            }
-            if (!Objects.isNull(nextProcess)) {
-                processes.addAll(nextProcess.flattenProcessList());
-            }
-            return ListUtils.unmodifiableList(processes);
-        }
-
-        protected int maxCode() {
-            int maxCode = this.flattenProcessList().stream().mapToInt(p -> p.code).max().getAsInt();
-            return maxCode;
-        }
-
-        public Process<Context> root() {
-            if (Objects.isNull(rootProcess)) {
-                return this;
-            } else {
-                return rootProcess;
-            }
-        }
-
-        public Process<Context> sub(Consumer<Context>... subProcesses) {
-            for (Consumer<Context> process : subProcesses) {
-                addSub(process);
-            }
-            return this;
-        }
-
-        public Process<Context> sub(Process<Context>... subProcesses) {
-            for (Process<Context> process : subProcesses) {
-                addSub(process);
-            }
-            return this;
-        }
-
-        public Process<Context> addSub(Consumer<Context> process) {
-            return addSub(0, process);
-        }
-
-        public Process<Context> addSub(Integer code, Consumer<Context> process) {
-            return addSub(code, "", process, null);
-        }
-
-        public Process<Context> addSub(Integer code, String name, Consumer<Context> process) {
-            return addSub(code, name, process, null);
-        }
-
-        public Process<Context> addSub(Integer code, Consumer<Context> process, Consumer<Context> rollback) {
-            return addSub(code, "", process, rollback, null);
-        }
-
-        public Process<Context> addSub(Integer code, String name, Consumer<Context> process, Consumer<Context> rollback) {
-            return addSub(code, name, process, rollback, null);
-        }
-
-        public Process<Context> addSub(Integer code, Consumer<Context> process, Consumer<Context> rollback, Consumer<Process<Context>> subProcessConfig) {
-            return addSub(code, "", process, rollback, null);
-        }
-
-        public Process<Context> addSub(Integer code, String name, Consumer<Context> process, Consumer<Context> rollback, Consumer<Process<Context>> subProcessConfig) {
-            Process<Context> subProcess = of(code, name, process, rollback);
-            addSub(subProcess);
-            if (subProcessConfig != null) {
-                subProcessConfig.accept(subProcess);
-            }
-            return this;
-        }
-
-        public Process<Context> addSub(Process<Context> subProcess) {
-            if (subProcess.code == 0 || subProcess.code == null) {
-                int next = maxCode() + 10;
-                for (Process<Context> process : subProcess.flattenProcessList()) {
-                    process.code = next;
-                    next += 10;
-                }
-            }
-            subProcess.rootProcess = root();
-            this.subProcesses.add(subProcess);
-            return this;
-        }
-
-        public Process<Context> then(Consumer<Context> process) {
-            return then(0, process);
-        }
-
-        public Process<Context> then(Integer code, Consumer<Context> process) {
-            return then(code, "", process, null);
-        }
-
-        public Process<Context> then(Integer code, String name, Consumer<Context> process) {
-            return then(code, name, process, null);
-        }
-
-        public Process<Context> then(Integer code, Consumer<Context> process, Consumer<Context> rollback) {
-            return then(code, "", process, rollback);
-        }
-
-        public Process<Context> then(Integer code, String name, Consumer<Context> process, Consumer<Context> rollback) {
-            code = code > 0 ? code : maxCode() + 10;
-            Process<Context> next = of(code, name, process, rollback);
-            next.rootProcess = root();
-            this.nextProcess = next;
-            return next;
-        }
-
-        public Process<Context> then(Process<Context> nextProcess) {
-            if (nextProcess.code == 0 || nextProcess.code == null) {
-                int next = maxCode() + 10;
-                for (Process<Context> process : nextProcess.flattenProcessList()) {
-                    process.code = next;
-                    next += 10;
-                }
-            }
-            nextProcess.rootProcess = root();
-            this.nextProcess = nextProcess;
-            return nextProcess;
-        }
-
-        public static <Context> Process<Context> of(Consumer<Context> process) {
-            return new Process<>(0, "", process, null);
-        }
-
-        public static <Context> Process<Context> of(Integer code, Consumer<Context> process) {
-            return new Process<>(code, "", process, null);
-        }
-
-        public static <Context> Process<Context> of(Integer code, String name, Consumer<Context> process) {
-            return new Process<>(code, name, process, null);
-        }
-
-        public static <Context> Process<Context> of(Integer code, Consumer<Context> process, Consumer<Context> rollback) {
-            return new Process<>(code, "", process, rollback);
-        }
-
-        public static <Context> Process<Context> of(Integer code, String name, Consumer<Context> process, Consumer<Context> rollback) {
-            return new Process<>(code, name, process, rollback);
         }
     }
 
+    public static interface ProcessHandler<Input, Output, Context> {
+        Output process(Input input, Context context);
+    }
+
+    public static interface RollbackHandler<Input, Output, Context> {
+        boolean rollback(Input input, Output output, Context context);
+    }
 }

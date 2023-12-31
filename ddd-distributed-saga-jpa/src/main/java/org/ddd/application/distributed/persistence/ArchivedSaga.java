@@ -75,7 +75,7 @@ public class ArchivedSaga {
     private String contextDataType;
 
     /**
-     * 业务类型
+     * 执行状态
      * int
      */
     @Column(name = "`saga_state`")
@@ -196,11 +196,32 @@ public class ArchivedSaga {
         private LocalDateTime createAt;
 
         /**
-         * 上下文
+         * 输入数据
          * varchar
          */
-        @Column(name = "`context_data`")
-        private String contextData;
+        @Column(name = "`input_data`")
+        private String inputData;
+
+        /**
+         * 输入类型
+         * varchar
+         */
+        @Column(name = "`input_data_type`")
+        private String inputDataType;
+
+        /**
+         * 输出数据
+         * varchar
+         */
+        @Column(name = "`output_data`")
+        private String outputData;
+
+        /**
+         * 输出类型
+         * varchar
+         */
+        @Column(name = "`output_data_type`")
+        private String outputDataType;
 
         /**
          * 处理执行状态

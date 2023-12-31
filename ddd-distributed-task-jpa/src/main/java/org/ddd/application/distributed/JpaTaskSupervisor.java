@@ -6,6 +6,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.TaskRecord;
 import org.ddd.application.distributed.persistence.TaskRecordJpaRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -43,7 +45,7 @@ public class JpaTaskSupervisor implements TaskSupervisor {
     }
 
     private Optional<TaskRecord> queryTaskRecord(String uuid){
-        Optional<TaskRecord> taskRecord = taskRecordJpaRepository.findOne((root, query, cb) -> {
+        Optional<TaskRecord> taskRecord = taskRecordJpaRepository.findAll((root, query, cb) -> {
             query.where(
                     cb.and(
                             cb.equal(root.get(TaskRecord.F_TASK_UUID), uuid),
@@ -51,7 +53,7 @@ public class JpaTaskSupervisor implements TaskSupervisor {
                     )
             );
             return null;
-        });
+        }, PageRequest.of(0,1)).stream().findFirst();
         return taskRecord;
     }
 

@@ -12,10 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
-import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.List;
-
 import static org.ddd.share.Constants.*;
 
 /**

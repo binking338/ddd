@@ -19,6 +19,7 @@
         <module>ddd-distributed-task-jpa</module>
         <module>starter/ddd-domain-starter-jpa-rocketmq</module>
         <module>starter/ddd-distributed-starter-jpa</module>
+        <module>starter/ddd-distributed-saga-starter-jpa</module>
         <module>example/ddd-mvc-example</module>
     </modules>
 

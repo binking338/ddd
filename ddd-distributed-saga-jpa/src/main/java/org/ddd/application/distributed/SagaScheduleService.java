@@ -123,7 +123,7 @@ public class SagaScheduleService {
                             delay = Duration.between(now, nextTryTime).getSeconds();
                         }
 
-                        saga = sagaSupervisor.beginResume(saga, nextTryTime);
+                        saga = sagaSupervisor.holdState4Run(saga, nextTryTime);
                         final Saga fSaga = saga;
                         executor.schedule(() -> sagaSupervisor.resume(fSaga), delay, TimeUnit.SECONDS);
                     }
@@ -195,7 +195,7 @@ public class SagaScheduleService {
                         if (nextTryTime.isAfter(now)) {
                             delay = Duration.between(now, nextTryTime).getSeconds();
                         }
-                        sagaSupervisor.beginnRollback(saga, nextTryTime);
+                        sagaSupervisor.holdState4Rollback(saga, nextTryTime);
                         executor.schedule(() -> sagaSupervisor.rollback(saga), delay, TimeUnit.SECONDS);
                     }
                 } catch (Exception ex) {
@@ -278,7 +278,10 @@ public class SagaScheduleService {
                                 .processCode(p.getProcessCode())
                                 .processName(p.getProcessName())
                                 .processState(p.getProcessState())
-                                .contextData(p.getContextData())
+                                .inputData(p.getInputData())
+                                .inputDataType(p.getInputDataType())
+                                .outputData(p.getOutputData())
+                                .outputDataType(p.getOutputDataType())
                                 .exception(p.getException())
                                 .lastTryTime(p.getLastTryTime())
                                 .triedTimes(p.getTriedTimes())

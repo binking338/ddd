@@ -1,11 +1,11 @@
 package org.ddd.application.distributed;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.ddd.application.distributed.persistence.Saga;
 import org.ddd.application.distributed.persistence.SagaJpaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
@@ -85,7 +85,10 @@ public class SagaSupervisor {
             throw new IllegalArgumentException("存在多个saga流程支持该context类型: " + context.getClass().getName());
         }
         SagaStateMachine<Context> sagaStateMachine = sagaStateMachineContextClassMap.get(context.getClass()).get(0);
-        Saga saga = sagaStateMachine.run(context, runImmediately, uuid);
+        Saga saga = sagaStateMachine.init(context, uuid);
+        if(runImmediately){
+            sagaStateMachine.run(saga);
+        }
         return saga;
     }
 
@@ -115,7 +118,10 @@ public class SagaSupervisor {
             throw new IllegalArgumentException("bizType 传入参数不支持: " + bizType);
         }
         SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(bizType);
-        Saga saga = sagaStateMachine.run(context, runImmediately, uuid);
+        Saga saga = sagaStateMachine.init(context, uuid);
+        if(runImmediately){
+            sagaStateMachine.run(saga);
+        }
         return saga;
     }
 
@@ -126,13 +132,13 @@ public class SagaSupervisor {
      * @return
      */
     public Saga query(String uuid) {
-        Optional<Saga> saga = sagaJpaRepository.findOne(((root, query, cb) -> {
+        Optional<Saga> saga = sagaJpaRepository.findAll(((root, query, cb) -> {
             query.where(cb.and(
                     cb.equal(root.get(Saga.F_SAGA_UUID), uuid),
                     cb.equal(root.get(Saga.F_SVC_NAME), svcName)
             ));
             return null;
-        }));
+        }), PageRequest.of(0, 1)).stream().findFirst();
         return saga.orElse(null);
     }
 
@@ -141,16 +147,16 @@ public class SagaSupervisor {
      * 开始复原Saga
      *
      * @param saga
-     * @param now
+     * @param time
      * @return
      */
-    public Saga beginResume(Saga saga, LocalDateTime now) {
+    public Saga holdState4Run(Saga saga, LocalDateTime time) {
         Assert.notNull(saga, "saga 参数不得为空");
         SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(saga.getBizType());
         if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
             throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
         }
-        Saga newSaga = sagaStateMachine.beginResume(saga, now);
+        Saga newSaga = sagaStateMachine.holdState4Run(saga, time);
         return newSaga;
     }
 
@@ -166,7 +172,7 @@ public class SagaSupervisor {
         if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
             throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
         }
-        Saga newSaga = sagaStateMachine.resume(saga);
+        Saga newSaga = sagaStateMachine.run(saga);
         return newSaga;
     }
 
@@ -174,15 +180,16 @@ public class SagaSupervisor {
      * 回滚Saga流程
      *
      * @param saga
+     * @param time
      * @return
      */
-    public Saga beginnRollback(Saga saga, LocalDateTime now) {
+    public Saga holdState4Rollback(Saga saga, LocalDateTime time) {
         Assert.notNull(saga, "saga 参数不得为空");
         SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(saga.getBizType());
         if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
             throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
         }
-        Saga newSaga = sagaStateMachine.beginRollback(saga, now);
+        Saga newSaga = sagaStateMachine.holdState4Rollback(saga, time);
         return newSaga;
     }
 

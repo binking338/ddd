@@ -35,7 +35,7 @@ public class JdbcLocker implements Locker {
     @Value(CONFIG_KEY_4_DISTRIBUTED_LOCKER_JDBC_FIELD_UNLOCKAT)
     private String fieldUnlockAt = "unlock_at";
 
-    @Value("${spring.jpa.show-sql:false}")
+    @Value("${spring.jpa.show-sql:${spring.jpa.showSql:false}}")
     private Boolean showSql = false;
 
     @Override

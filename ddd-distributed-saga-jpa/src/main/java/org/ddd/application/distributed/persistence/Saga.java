@@ -6,17 +6,12 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.time.DateUtils;
-import org.ddd.share.annotation.Retry;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * @author <template/>
@@ -49,6 +44,7 @@ public class Saga {
         this.sagaUuid = StringUtils.isNotBlank(uuid) ? uuid : UUID.randomUUID().toString();
         this.svcName = svcName;
         this.bizType = bizType;
+        this.context = context;
         this.contextData = (JSON.toJSONString(context));
         this.contextDataType = context == null ? Object.class.getName() : context.getClass().getName();
         this.sagaState = SagaState.INIT;
@@ -70,9 +66,11 @@ public class Saga {
             this.sagaState = SagaState.EXPIRED;
             return false;
         }
+        if (SagaState.RUNNING.equals(this.sagaState) && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
+            return true;
+        }
         if (!SagaState.INIT.equals(this.sagaState)
-                && (!SagaState.RUNNING.equals(this.sagaState) ||
-                (this.nextTryTime != null && this.nextTryTime.isAfter(now)))) {
+                && !SagaState.RUNNING.equals(this.sagaState)) {
             return false;
         }
         this.sagaState = SagaState.RUNNING;
@@ -82,17 +80,18 @@ public class Saga {
         return true;
     }
 
-    public void finishRunning(Object context) {
-        this.contextData = JSON.toJSONString(context);
+    public void finishRunning() {
+        syncContextData();
         this.sagaState = SagaState.DONE;
     }
 
     public void cancel() {
+        syncContextData();
         this.sagaState = SagaState.CANCEL;
     }
 
-    public void fail(Object context) {
-        this.contextData = JSON.toJSONString(context);
+    public void fail() {
+        syncContextData();
         if (triedTimes >= tryTimes) {
             this.sagaState = SagaState.FAILED;
         } else {
@@ -105,7 +104,8 @@ public class Saga {
             this.sagaState = SagaState.EXPIRED;
             return false;
         }
-        if (SagaState.ROLLBACKING.equals(this.sagaState)) {
+        if (SagaState.ROLLBACKING.equals(this.sagaState)
+                && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
             return true;
         }
         if (!SagaState.FAILED.equals(this.sagaState)) {
@@ -116,17 +116,44 @@ public class Saga {
         return true;
     }
 
-    public void finishRollback(Object context) {
-        this.contextData = JSON.toJSONString(context);
+    public void finishRollback() {
+        syncContextData();
         this.sagaState = SagaState.ROLLBACKED;
     }
 
     public SagaProcess findProcess(Integer processCode) {
-        return processes.stream().filter(p -> (Objects.equals(p.processCode, processCode))).findFirst().orElse(null);
+        return  processes == null
+                ? null
+                :  processes.stream().filter(p -> (Objects.equals(p.processCode, processCode))).findFirst().orElse(null);
     }
 
-    public <Ctx> Ctx getContext(Class<Ctx> ctxClass) {
-        return JSON.parseObject(contextData, ctxClass);
+    public void addProcess(Saga.SagaProcess process) {
+        if(this.processes == null){
+            this.processes = new ArrayList<>();
+        }
+        this.processes.add(process);
+    }
+
+    @Transient
+    private Object context = null;
+
+    public void syncContextData(){
+        this.contextData = JSON.toJSONString(getContext());
+    }
+
+    public Object getContext() {
+        if(this.context != null){
+            return this.context;
+        }
+        Class ctxClass = null;
+        try {
+            ctxClass = Class.forName(getContextDataType());
+        } catch (Exception _) {
+            /* don't care */
+            return null;
+        }
+        this.context = JSON.parseObject(contextData, ctxClass);
+        return this.context;
     }
 
     @Override
@@ -175,7 +202,7 @@ public class Saga {
     private String contextDataType;
 
     /**
-     * 业务类型
+     * 执行状态
      * int
      */
     @Column(name = "`saga_state`")
@@ -267,8 +294,11 @@ public class Saga {
         public void init(LocalDateTime now, Integer code, String name) {
             this.processCode = code;
             this.processName = name;
-            this.contextData = "";
             this.processState = SagaState.INIT;
+            this.inputData = "null";
+            this.inputDataType = Object.class.getName();
+            this.outputData = "null";
+            this.outputDataType = Object.class.getName();
             this.triedTimes = 0;
             this.lastTryTime = now;
             this.createAt = now;
@@ -279,11 +309,14 @@ public class Saga {
          * @param now
          * @return
          */
-        public boolean startRunning(LocalDateTime now, Object context) {
+        public boolean startRunning(LocalDateTime now, Object input) {
             if (SagaState.INIT.equals(this.processState)
                     || SagaState.FAILED.equals(this.processState)
                     || SagaState.RUNNING.equals(this.processState)) {
-                this.contextData = JSON.toJSONString(context);
+                this.inputData = JSON.toJSONString(input);
+                this.inputDataType = input == null
+                        ? Object.class.getName()
+                        : input.getClass().getName();
                 this.processState = SagaState.RUNNING;
                 this.lastTryTime = now;
                 this.triedTimes++;
@@ -292,18 +325,21 @@ public class Saga {
             return false;
         }
 
-        public void finishRunning(Object context) {
-            this.contextData = JSON.toJSONString(context);
-            this.processState = SagaState.DONE;
+        public void finishRunning(Object output) {
+            if (SagaState.RUNNING.equals(this.processState)) {
+                this.outputData = JSON.toJSONString(output);
+                this.outputDataType = output == null
+                        ? Object.class.getName()
+                        : output.getClass().getName();
+                this.processState = SagaState.DONE;
+            }
         }
 
-        public void startRollback(Object context) {
-            this.contextData = JSON.toJSONString(context);
+        public void startRollback() {
             this.processState = SagaState.ROLLBACKING;
         }
 
-        public void finishRollback(Object context) {
-            this.contextData = JSON.toJSONString(context);
+        public void finishRollback() {
             this.processState = SagaState.ROLLBACKED;
         }
 
@@ -312,8 +348,28 @@ public class Saga {
             this.exception = StringUtils.isEmpty(ex.getMessage()) ? "" : ex.getMessage();
         }
 
-        public <Ctx> Ctx getContext(Class<Ctx> ctxClass) {
-            return JSON.parseObject(contextData, ctxClass);
+        public Object getInput() {
+            Class inputClass = null;
+            try {
+                inputClass = Class.forName(getInputDataType());
+            } catch (Exception _) {
+                /* don't care */
+                return null;
+            }
+            Object input = JSON.parseObject(getInputData(), inputClass);
+            return input;
+        }
+
+        public Object getOutput() {
+            Class outputClass = null;
+            try {
+                outputClass = Class.forName(getOutputDataType());
+            } catch (Exception _) {
+                /* don't care */
+                return null;
+            }
+            Object output = JSON.parseObject(getInputData(), outputClass);
+            return output;
         }
 
         @Override
@@ -348,11 +404,32 @@ public class Saga {
         private LocalDateTime createAt;
 
         /**
-         * 上下文
+         * 输入数据
          * varchar
          */
-        @Column(name = "`context_data`")
-        private String contextData;
+        @Column(name = "`input_data`")
+        private String inputData;
+
+        /**
+         * 输入类型
+         * varchar
+         */
+        @Column(name = "`input_data_type`")
+        private String inputDataType;
+
+        /**
+         * 输出数据
+         * varchar
+         */
+        @Column(name = "`output_data`")
+        private String outputData;
+
+        /**
+         * 输出类型
+         * varchar
+         */
+        @Column(name = "`output_data_type`")
+        private String outputDataType;
 
         /**
          * 处理执行状态

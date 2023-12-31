@@ -1,4 +1,3 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
   org.ddd.application.distributed.JdbcLockerAutoConfiguration,\
-  org.ddd.application.distributed.JpaSagaAutoConfiguration,\
   org.ddd.application.distributed.JpaTaskAutoConfiguration
