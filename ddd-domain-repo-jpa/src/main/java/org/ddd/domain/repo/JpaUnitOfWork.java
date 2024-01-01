@@ -77,7 +77,7 @@ public class JpaUnitOfWork implements UnitOfWork {
             persistEntityList = new HashSet<>();
         }
         Set<Object> deleteEntityList = null;
-        if(removedEntitiesThreadLocal.get() != null){
+        if (removedEntitiesThreadLocal.get() != null) {
             deleteEntityList = removedEntitiesThreadLocal.get().stream().collect(Collectors.toSet());
             removedEntitiesThreadLocal.get().clear();
         } else {
@@ -158,6 +158,7 @@ public class JpaUnitOfWork implements UnitOfWork {
 
     /**
      * 自定义查询
+     * 期待返回一条记录，数据异常返回0条或多条记录将抛出异常
      *
      * @param resultClass
      * @param fromEntityClass
@@ -177,6 +178,7 @@ public class JpaUnitOfWork implements UnitOfWork {
 
     /**
      * 自定义查询
+     * 返回0条或多条记录
      *
      * @param resultClass
      * @param fromEntityClass
@@ -192,6 +194,71 @@ public class JpaUnitOfWork implements UnitOfWork {
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
         List<R> results = getEntityManager().createQuery(criteriaQuery).getResultList();
         return results;
+    }
+
+    /**
+     * 自定义查询
+     * 如果存在符合筛选条件的记录，返回第一条记录
+     *
+     * @param resultClass
+     * @param fromEntityClass
+     * @param queryBuilder
+     * @return
+     * @param <R>
+     * @param <F>
+     */
+    public <R,F> Optional<R> firstOne(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
+        CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+        CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
+        Root<F> root = criteriaQuery.from(fromEntityClass);
+        queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+        List<R> results = getEntityManager().createQuery(criteriaQuery)
+                .setFirstResult(0)
+                .setMaxResults(1)
+                .getResultList();
+        return results.stream().findFirst();
+    }
+
+    /**
+     * 自定义查询
+     * 获取分页列表
+     *
+     * @param resultClass
+     * @param fromEntityClass
+     * @param queryBuilder
+     * @param pageIndex
+     * @param pageSize
+     * @return
+     * @param <R>
+     * @param <F>
+     */
+    public <R, F> List<R> page(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder, int pageIndex, int pageSize) {
+        CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+        CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
+        Root<F> root = criteriaQuery.from(fromEntityClass);
+        queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+        List<R> results = getEntityManager().createQuery(criteriaQuery)
+                .setFirstResult(pageSize * pageIndex).setMaxResults(pageSize)
+                .getResultList();
+        return results;
+    }
+
+    /**
+     * 自定义查询
+     * 返回查询计数
+     *
+     * @param fromEntityClass
+     * @param queryBuilder
+     * @return
+     * @param <F>
+     */
+    public <F> long count(Class<F> fromEntityClass, QueryBuilder<Long, F> queryBuilder) {
+        CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+        CriteriaQuery<Long> criteriaQuery = criteriaBuilder.createQuery(Long.class);
+        Root<F> root = criteriaQuery.from(fromEntityClass);
+        queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+        long total = getEntityManager().createQuery(criteriaQuery).getSingleResult().longValue();
+        return total;
     }
 
 
@@ -355,7 +422,7 @@ public class JpaUnitOfWork implements UnitOfWork {
             EventRecord event = eventRecordRepository.create();
             event.init(eventPayload, this.svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
             event.beginDelivery(LocalDateTime.now());
-            if(subscribeInTransaction(eventPayload)){
+            if (subscribeInTransaction(eventPayload)) {
                 transientEvents.add(event);
             } else {
                 eventRecordRepository.save(event);
@@ -367,7 +434,7 @@ public class JpaUnitOfWork implements UnitOfWork {
         applicationEventPublisher.publishEvent(new TransactionCommittedEvent(this, persistedEvents));
     }
 
-    public boolean subscribeInTransaction(Object payload){
+    public boolean subscribeInTransaction(Object payload) {
         DomainEvent domainEvent = payload == null
                 ? null
                 : payload.getClass().getAnnotation(DomainEvent.class);
