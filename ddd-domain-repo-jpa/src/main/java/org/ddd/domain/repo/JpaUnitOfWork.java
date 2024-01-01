@@ -152,6 +152,9 @@ public class JpaUnitOfWork implements UnitOfWork {
     protected EntityManager entityManager;
     protected static JpaUnitOfWork instance;
 
+    @Value("${ddd.domain.JpaUnitOfWork.retrieveCountWarnThreshold:3000}")
+    private int RETRIEVE_COUNT_WARN_THRESHOLD;
+
     public interface QueryBuilder<R, F> {
         void build(CriteriaBuilder cb, CriteriaQuery<R> cq, Root<F> root);
     }
@@ -193,6 +196,9 @@ public class JpaUnitOfWork implements UnitOfWork {
         Root<F> root = criteriaQuery.from(fromEntityClass);
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
         List<R> results = getEntityManager().createQuery(criteriaQuery).getResultList();
+        if (results.size() > RETRIEVE_COUNT_WARN_THRESHOLD) {
+            log.warn("查询记录数过多: retrieve_count=" + results.size());
+        }
         return results;
     }
 
@@ -203,11 +209,11 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param resultClass
      * @param fromEntityClass
      * @param queryBuilder
-     * @return
      * @param <R>
      * @param <F>
+     * @return
      */
-    public <R,F> Optional<R> firstOne(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
+    public <R, F> Optional<R> firstOne(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
         CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
         Root<F> root = criteriaQuery.from(fromEntityClass);
@@ -228,9 +234,9 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param queryBuilder
      * @param pageIndex
      * @param pageSize
-     * @return
      * @param <R>
      * @param <F>
+     * @return
      */
     public <R, F> List<R> page(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder, int pageIndex, int pageSize) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
@@ -249,8 +255,8 @@ public class JpaUnitOfWork implements UnitOfWork {
      *
      * @param fromEntityClass
      * @param queryBuilder
-     * @return
      * @param <F>
+     * @return
      */
     public <F> long count(Class<F> fromEntityClass, QueryBuilder<Long, F> queryBuilder) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
