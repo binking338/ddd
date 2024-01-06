@@ -21,6 +21,7 @@
         <module>starter/ddd-distributed-starter-jpa</module>
         <module>starter/ddd-distributed-saga-starter-jpa</module>
         <module>example/ddd-mvc-example</module>
+        <module>ddd-application-query-jdbc</module>
     </modules>
 
     <properties>
