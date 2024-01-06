@@ -68,6 +68,9 @@ public class JpaUnitOfWork implements UnitOfWork {
         save(Propagation.REQUIRED);
     }
 
+    @Value("${ddd.domain.JpaUnitOfWork.entityGetIdMethod:getId}")
+    private String entityGetIdMethod = null;
+
     public void save(Propagation propagation) {
         Set<Object> persistEntityList = null;
         if (persistedEntitiesThreadLocal.get() != null) {
@@ -102,7 +105,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                     if (!getEntityManager().contains(entity)) {
                         Object id = null;
                         try {
-                            id = entity.getClass().getMethod("getId").invoke(entity);
+                            id = entity.getClass().getMethod(entityGetIdMethod).invoke(entity);
                         } catch (Exception _ex) {
                             /* we don't care */
                         }
@@ -170,7 +173,7 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param <F>
      * @return
      */
-    public <R, F> R one(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
+    public <R, F> R queryOne(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
         CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
         Root<F> root = criteriaQuery.from(fromEntityClass);
@@ -190,7 +193,7 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param <F>
      * @return
      */
-    public <R, F> List<R> list(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
+    public <R, F> List<R> queryList(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
         CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
         Root<F> root = criteriaQuery.from(fromEntityClass);
@@ -213,7 +216,7 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param <F>
      * @return
      */
-    public <R, F> Optional<R> firstOne(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
+    public <R, F> Optional<R> queryFirst(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
         CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
         Root<F> root = criteriaQuery.from(fromEntityClass);
@@ -238,7 +241,7 @@ public class JpaUnitOfWork implements UnitOfWork {
      * @param <F>
      * @return
      */
-    public <R, F> List<R> page(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder, int pageIndex, int pageSize) {
+    public <R, F> List<R> queryPage(Class<R> resultClass, Class<F> fromEntityClass, QueryBuilder<R, F> queryBuilder, int pageIndex, int pageSize) {
         CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
         CriteriaQuery<R> criteriaQuery = criteriaBuilder.createQuery(resultClass);
         Root<F> root = criteriaQuery.from(fromEntityClass);
