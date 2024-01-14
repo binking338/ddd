@@ -338,7 +338,9 @@ public abstract class SagaStateMachine<Context> {
             }
             return output;
         };
-        return process(handler, input, annotation.code(), annotation.name(), saga);
+        int code = annotation.code();
+        String name = StringUtils.isEmpty(annotation.name()) ? method.getName() : annotation.name();
+        return process(handler, input, code, name, saga);
     }
 
     @Data
