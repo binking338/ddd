@@ -42,9 +42,11 @@ public class JpaUnitOfWork implements UnitOfWork {
     private final DomainEventSubscriberManager domainEventSubscriberManager;
     private final EventRecordRepository eventRecordRepository;
     private final JpaSpecificationManager jpaSpecificationManager;
+    private final JpaPersistListenerManager jpaPersistListenerManager;
 
     private ThreadLocal<Set<Object>> persistedEntitiesThreadLocal = new ThreadLocal<>();
     private ThreadLocal<Set<Object>> removedEntitiesThreadLocal = new ThreadLocal<>();
+    private ThreadLocal<EntityPersisttedEvent> entityPersisttedEventThreadLocal = ThreadLocal.withInitial(() -> new EntityPersisttedEvent(instance, new HashSet<>(), new HashSet<>(), new HashSet<>()));
 
     public void persist(Object entity) {
         if (persistedEntitiesThreadLocal.get() == null) {
@@ -96,28 +98,32 @@ public class JpaUnitOfWork implements UnitOfWork {
         save(input -> {
             Set<Object> persistEntities = input[0];
             Set<Object> deleteEntities = input[1];
-            specifyPersistedEntites(persistEntities);
+            specifyEntitesInTransaction(persistEntities);
             boolean flush = false;
             List<Object> refreshEntityList = null;
             if (persistEntities != null && !persistEntities.isEmpty()) {
                 flush = true;
                 for (Object entity : persistEntities) {
-                    if (!getEntityManager().contains(entity)) {
-                        Object id = null;
-                        try {
-                            id = entity.getClass().getMethod(entityGetIdMethod).invoke(entity);
-                        } catch (Exception _ex) {
-                            /* we don't care */
-                        }
-                        if (id != null) {
+                    Object id = null;
+                    try {
+                        id = entity.getClass().getMethod(entityGetIdMethod).invoke(entity);
+                    } catch (Exception _ex) {
+                        /* we don't care */
+                    }
+                    if (id != null) {
+                        if (!getEntityManager().contains(entity)) {
                             getEntityManager().merge(entity);
-                        } else {
+                        }
+                        entityPersisttedEventThreadLocal.get().getCreatedEntities().add(entity);
+                    } else {
+                        if (!getEntityManager().contains(entity)) {
                             getEntityManager().persist(entity);
                             if (refreshEntityList == null) {
                                 refreshEntityList = new ArrayList<>();
                             }
                             refreshEntityList.add(entity);
                         }
+                        entityPersisttedEventThreadLocal.get().getUpdatedEntities().add(entity);
                     }
                 }
             }
@@ -129,6 +135,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                     } else {
                         getEntityManager().remove(getEntityManager().merge(entity));
                     }
+                    entityPersisttedEventThreadLocal.get().getDeletedEntities().add(entity);
                 }
             }
             if (flush) {
@@ -138,8 +145,9 @@ public class JpaUnitOfWork implements UnitOfWork {
                         getEntityManager().refresh(entity);
                     }
                 }
+                applicationEventPublisher.publishEvent(entityPersisttedEventThreadLocal.get().clone());
+                entityPersisttedEventThreadLocal.get().reset();
             }
-
             publishTransactionEvent(domainEventSupervisor.getEvents());
             return null;
         }, saveAndDeleteEntityList, propagation);
@@ -148,6 +156,7 @@ public class JpaUnitOfWork implements UnitOfWork {
     public void reset() {
         persistedEntitiesThreadLocal.remove();
         removedEntitiesThreadLocal.remove();
+        entityPersisttedEventThreadLocal.get().reset();
     }
 
     @Getter
@@ -372,7 +381,11 @@ public class JpaUnitOfWork implements UnitOfWork {
         return Collections.emptyList();
     }
 
-    protected void specifyPersistedEntites(Set<Object> entities) {
+    /**
+     * 校验持久化实体
+     * @param entities
+     */
+    protected void specifyEntitesInTransaction(Set<Object> entities) {
         if (entities != null && !entities.isEmpty()) {
             for (Object entity : entities) {
                 Specification.Result result = jpaSpecificationManager.specify(entity);
@@ -382,6 +395,8 @@ public class JpaUnitOfWork implements UnitOfWork {
             }
         }
     }
+
+
 
     /**
      * UoW事务成功提交事件
@@ -421,6 +436,34 @@ public class JpaUnitOfWork implements UnitOfWork {
         }
     }
 
+    /**
+     * UoW实体持久化事件
+     */
+    public static class EntityPersisttedEvent extends ApplicationEvent {
+        @Getter
+        Set<Object> createdEntities;
+        @Getter
+        Set<Object> updatedEntities;
+        @Getter
+        Set<Object> deletedEntities;
+
+        public EntityPersisttedEvent(Object source, Set<Object> createdEntities, Set<Object> updatedEntities, Set<Object> deletedEntities){
+            super(source);
+            this.createdEntities = createdEntities;
+            this.updatedEntities = updatedEntities;
+            this.deletedEntities = deletedEntities;
+        }
+
+        public void reset(){
+            this.createdEntities.clear();
+            this.updatedEntities.clear();
+            this.deletedEntities.clear();
+        }
+        public EntityPersisttedEvent clone(){
+            return new EntityPersisttedEvent(this.getSource(), new HashSet<>(createdEntities), new HashSet<>(updatedEntities), new HashSet<>(deletedEntities));
+        }
+    }
+
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
@@ -451,6 +494,21 @@ public class JpaUnitOfWork implements UnitOfWork {
             return !domainEvent.forceSubscribeAfterTransaction();
         } else {
             return true;
+        }
+    }
+
+    @TransactionalEventListener(fallbackExecution = true, classes = EntityPersisttedEvent.class)
+    public void onTransactionCommitted(EntityPersisttedEvent event){
+        for (Object entity : event.getCreatedEntities()) {
+            jpaPersistListenerManager.onPersist(entity);
+            jpaPersistListenerManager.onCreate(entity);
+        }
+        for (Object entity : event.getUpdatedEntities()) {
+            jpaPersistListenerManager.onPersist(entity);
+            jpaPersistListenerManager.onUpdate(entity);
+        }
+        for (Object entity : event.getDeletedEntities()) {
+            jpaPersistListenerManager.onDelete(entity);
         }
     }
 

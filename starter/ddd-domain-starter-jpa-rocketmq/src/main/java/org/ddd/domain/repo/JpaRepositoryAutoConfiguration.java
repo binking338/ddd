@@ -29,14 +29,20 @@ public class JpaRepositoryAutoConfiguration {
     private final EventRecordRepository eventRecordRepository;
 
     @Bean
+    public JpaPersistListenerManager jpaPersistListenerManager(List<AbstractJpaPersistListener> persistListeners){
+        JpaPersistListenerManager persistListenerManager = new JpaPersistListenerManager(persistListeners);
+        return persistListenerManager;
+    }
+
+    @Bean
     public JpaSpecificationManager jpaSpecificationManager(List<AbstractJpaSpecification> specifications){
         JpaSpecificationManager specificationManager = new JpaSpecificationManager(specifications);
         return specificationManager;
     }
 
     @Bean
-    public JpaUnitOfWork jpaUnitOfWork(JpaSpecificationManager jpaSpecificationManager){
-        JpaUnitOfWork unitOfWork = new JpaUnitOfWork(applicationEventPublisher, domainEventSupervisor, domainEventPublisher, domainEventSubscriberManager, eventRecordRepository, jpaSpecificationManager);
+    public JpaUnitOfWork jpaUnitOfWork(JpaSpecificationManager jpaSpecificationManager, JpaPersistListenerManager jpaPersistListenerManager){
+        JpaUnitOfWork unitOfWork = new JpaUnitOfWork(applicationEventPublisher, domainEventSupervisor, domainEventPublisher, domainEventSubscriberManager, eventRecordRepository, jpaSpecificationManager, jpaPersistListenerManager);
         return unitOfWork;
     }
 

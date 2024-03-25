@@ -17,14 +17,13 @@ public class JpaSpecificationManager implements SpecificationManager {
     private final List<AbstractJpaSpecification> specifications;
     private Map<Class, List<AbstractJpaSpecification>> specificationMap;
 
-    @Override
-    public <Entity> Specification.Result specify(Entity entity) {
+    private void init(){
         if(specificationMap == null){
             synchronized (this){
                 if(specificationMap == null){
                     specificationMap = new java.util.HashMap<Class, List<AbstractJpaSpecification>>();
                     specifications.sort((a,b)->
-                        a.getClass().getAnnotation(Order.class).value() - b.getClass().getAnnotation(Order.class).value()
+                            a.getClass().getAnnotation(Order.class).value() - b.getClass().getAnnotation(Order.class).value()
                     );
                     for (AbstractJpaSpecification specification : specifications) {
                         if(!specificationMap.containsKey(specification.forEntityClass())){
@@ -36,6 +35,11 @@ public class JpaSpecificationManager implements SpecificationManager {
                 }
             }
         }
+    }
+
+    @Override
+    public <Entity> Specification.Result specify(Entity entity) {
+        init();
         List<AbstractJpaSpecification> specifications = specificationMap.get(entity.getClass());
         if(specifications != null) {
             for (AbstractJpaSpecification specification : specifications) {
