@@ -78,8 +78,9 @@ public class RocketMqDomainEventSubscriberAdapter {
 
     private DefaultMQPushConsumer startConsuming(Class domainEventClass) {
         DomainEvent domainEvent = (DomainEvent) domainEventClass.getAnnotation(DomainEvent.class);
-        if (Objects.isNull(domainEvent) || StringUtils.isBlank(domainEvent.value())) {
-            // 不是集成事件
+        if (Objects.isNull(domainEvent) || StringUtils.isBlank(domainEvent.value())
+                || DomainEvent.NONE_SUBSCRIBER.equalsIgnoreCase(domainEvent.subscriber())) {
+            // 不是集成事件, 或显式标明无订阅
             return null;
         }
         if (!rocketMqDomainEventSubscriberManager.hasSubscriber(domainEventClass)) {
