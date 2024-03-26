@@ -94,6 +94,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                 persistEntityList.add(entity);
             }
         }
+        specifyEntitesBeforeTransaction(persistEntityList);
         Set<Object>[] saveAndDeleteEntityList = new Set[]{persistEntityList, deleteEntityList};
         save(input -> {
             Set<Object> persistEntities = input[0];
@@ -148,7 +149,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                 applicationEventPublisher.publishEvent(entityPersisttedEventThreadLocal.get().clone());
                 entityPersisttedEventThreadLocal.get().reset();
             }
-            publishTransactionEvent(domainEventSupervisor.getEvents());
+            publishTransactionEvent();
             return null;
         }, saveAndDeleteEntityList, propagation);
     }
@@ -396,7 +397,20 @@ public class JpaUnitOfWork implements UnitOfWork {
         }
     }
 
-
+    /**
+     * 校验持久化实体(事务开启前)
+     * @param entities
+     */
+    protected void specifyEntitesBeforeTransaction(Set<Object> entities) {
+        if (entities != null && !entities.isEmpty()) {
+            for (Object entity : entities) {
+                Specification.Result result = jpaSpecificationManager.specifyBeforeTransaction(entity);
+                if (!result.isPassed()) {
+                    throw new DomainException(result.getMessage());
+                }
+            }
+        }
+    }
 
     /**
      * UoW事务成功提交事件
@@ -467,7 +481,8 @@ public class JpaUnitOfWork implements UnitOfWork {
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
-    protected void publishTransactionEvent(List<Object> eventPayloads) {
+    protected void publishTransactionEvent() {
+        List<Object> eventPayloads = domainEventSupervisor.getEvents();
         List<Object> persistedEvents = new ArrayList<>(eventPayloads.size());
         List<Object> transientEvents = new ArrayList<>(eventPayloads.size());
         for (Object eventPayload : eventPayloads) {

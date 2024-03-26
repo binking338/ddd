@@ -13,4 +13,11 @@ public interface SpecificationManager {
      * @param <Entity>
      */
     <Entity> Specification.Result specify(Entity entity);
+    /**
+     * 校验实体是否符合规格约束（事务开启前）
+     * @param entity
+     * @return
+     * @param <Entity>
+     */
+    <Entity> Specification.Result specifyBeforeTransaction(Entity entity);
 }

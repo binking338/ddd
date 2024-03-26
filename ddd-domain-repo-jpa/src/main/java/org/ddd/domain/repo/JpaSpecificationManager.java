@@ -43,6 +43,23 @@ public class JpaSpecificationManager implements SpecificationManager {
         List<AbstractJpaSpecification> specifications = specificationMap.get(entity.getClass());
         if(specifications != null) {
             for (AbstractJpaSpecification specification : specifications) {
+                if(!specification.forceBeforeTransaction()) continue;
+                Specification.Result result = specification.specify(entity);
+                if (!result.isPassed()) {
+                    return result;
+                }
+            }
+        }
+        return Specification.Result.pass();
+    }
+    @Override
+
+    public <Entity> Specification.Result specifyBeforeTransaction(Entity entity) {
+        init();
+        List<AbstractJpaSpecification> specifications = specificationMap.get(entity.getClass());
+        if(specifications != null) {
+            for (AbstractJpaSpecification specification : specifications) {
+                if(!specification.forceBeforeTransaction()) continue;
                 Specification.Result result = specification.specify(entity);
                 if (!result.isPassed()) {
                     return result;
