@@ -18,23 +18,22 @@ public @interface DomainEvent {
 
     /**
      * 领域事件名称
-     * 只有集成事件需要定义领域事件名称，集成事件将使用mq向外部系统发出
+     * 集成事件需要定义领域事件名称（通常作为MQ topic名称）
      *
      * @return
      */
     String value() default "";
 
     /**
-     * 订阅者
-     * 集成事件的场景下，该值将会成为消费分组名称的默认值
+     * 订阅者（通常作为MQ consumer group名称）
      * @return
      */
-    String subscriber() default "";
+    String subscriber() default NONE_SUBSCRIBER;
 
     /**
-     * 强制订阅逻辑在事务后执行
-     * 领域事件场景下，该值决定订阅逻辑的执行时机是在事务中还是事务后，如果在事务后执行，事件记录将会先持久化。
+     * 事件记录持久化
+     *
      * @return
      */
-    boolean forceSubscribeAfterTransaction() default false;
+    boolean persist() default false;
 }

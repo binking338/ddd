@@ -489,7 +489,7 @@ public class JpaUnitOfWork implements UnitOfWork {
             EventRecord event = eventRecordRepository.create();
             event.init(eventPayload, this.svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
             event.beginDelivery(LocalDateTime.now());
-            if (subscribeInTransaction(eventPayload)) {
+            if (!isDomainEventPersist(eventPayload)) {
                 transientEvents.add(event);
             } else {
                 eventRecordRepository.save(event);
@@ -501,14 +501,14 @@ public class JpaUnitOfWork implements UnitOfWork {
         applicationEventPublisher.publishEvent(new TransactionCommittedEvent(this, persistedEvents));
     }
 
-    public boolean subscribeInTransaction(Object payload) {
+    public boolean isDomainEventPersist(Object payload) {
         DomainEvent domainEvent = payload == null
                 ? null
                 : payload.getClass().getAnnotation(DomainEvent.class);
         if (domainEvent != null) {
-            return !domainEvent.forceSubscribeAfterTransaction();
+            return domainEvent.persist();
         } else {
-            return true;
+            return false;
         }
     }
 
