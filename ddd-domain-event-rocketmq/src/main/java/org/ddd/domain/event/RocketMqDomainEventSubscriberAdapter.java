@@ -48,6 +48,9 @@ public class RocketMqDomainEventSubscriberAdapter {
     @Autowired
     Environment environment;
 
+    @Autowired(required = false)
+    MQConsumerConfigure mqConsumerConfigure;
+
     @PostConstruct
     public void init() {
         Set<Class<?>> classes = ScanUtils.scanClass(scanPath, true);
@@ -60,7 +63,18 @@ public class RocketMqDomainEventSubscriberAdapter {
                 return false;
             }
         }).forEach(domainEventClass -> {
-            MQPushConsumer mqPushConsumer = startConsuming(domainEventClass);
+            MQPushConsumer mqPushConsumer = null;
+            if (mqPushConsumer != null) {
+                mqPushConsumer = mqConsumerConfigure.get(domainEventClass);
+            }
+            if (mqPushConsumer == null) {
+                createDefaultConsumer(domainEventClass);
+            }
+            try {
+                mqPushConsumer.start();
+            } catch (MQClientException e) {
+                log.error("领域事件消息监听启动失败", e);
+            }
             if (mqPushConsumer != null) {
                 mqPushConsumers.add(mqPushConsumer);
             }
@@ -76,7 +90,7 @@ public class RocketMqDomainEventSubscriberAdapter {
         });
     }
 
-    private DefaultMQPushConsumer startConsuming(Class domainEventClass) {
+    public DefaultMQPushConsumer createDefaultConsumer(Class domainEventClass) {
         DomainEvent domainEvent = (DomainEvent) domainEventClass.getAnnotation(DomainEvent.class);
         if (Objects.isNull(domainEvent) || StringUtils.isBlank(domainEvent.value())
                 || DomainEvent.NONE_SUBSCRIBER.equalsIgnoreCase(domainEvent.subscriber())) {
@@ -93,31 +107,30 @@ public class RocketMqDomainEventSubscriberAdapter {
         String tag = target.lastIndexOf(':') > 0 ? target.substring(target.lastIndexOf(':') + 1) : "";
 
         DefaultMQPushConsumer mqPushConsumer = new DefaultMQPushConsumer();
-        try {
-            mqPushConsumer.setConsumerGroup(getTopicConsumerGroup(topic, domainEvent.subscriber()));
-            mqPushConsumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
-            mqPushConsumer.setInstanceName(applicationName);
-            mqPushConsumer.subscribe(topic, tag);
-            String nameServerAddr = getTopicNamesrvAddr(topic, defaultNameSrv);
-            mqPushConsumer.setNamesrvAddr(nameServerAddr);
-            mqPushConsumer.setUnitName(domainEventClass.getSimpleName());
-            mqPushConsumer.registerMessageListener((List<MessageExt> msgs, ConsumeConcurrentlyContext context) -> {
-                try {
-                    for (MessageExt msg :
-                            msgs) {
-                        String strMsg = new String(msg.getBody(), "UTF-8");
-                        Object event = JSON.parseObject(strMsg, domainEventClass);
-                        rocketMqDomainEventSubscriberManager.trigger(event);
-                    }
-                    return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-                } catch (Exception ex) {
-                    log.error("领域事件消息消费失败", ex);
-                    return ConsumeConcurrentlyStatus.RECONSUME_LATER;
+        mqPushConsumer.setConsumerGroup(getTopicConsumerGroup(topic, domainEvent.subscriber()));
+        mqPushConsumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+        mqPushConsumer.setInstanceName(applicationName);
+        String nameServerAddr = getTopicNamesrvAddr(topic, defaultNameSrv);
+        mqPushConsumer.setNamesrvAddr(nameServerAddr);
+        mqPushConsumer.setUnitName(domainEventClass.getSimpleName());
+        mqPushConsumer.registerMessageListener((List<MessageExt> msgs, ConsumeConcurrentlyContext context) -> {
+            try {
+                for (MessageExt msg :
+                        msgs) {
+                    String strMsg = new String(msg.getBody(), "UTF-8");
+                    Object event = JSON.parseObject(strMsg, domainEventClass);
+                    rocketMqDomainEventSubscriberManager.trigger(event);
                 }
-            });
-            mqPushConsumer.start();
+                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+            } catch (Exception ex) {
+                log.error("领域事件消息消费失败", ex);
+                return ConsumeConcurrentlyStatus.RECONSUME_LATER;
+            }
+        });
+        try {
+            mqPushConsumer.subscribe(topic, tag);
         } catch (MQClientException e) {
-            log.error("领域事件消息监听启动失败", e);
+            log.error("领域事件消息监听订阅失败", e);
         }
         return mqPushConsumer;
     }
