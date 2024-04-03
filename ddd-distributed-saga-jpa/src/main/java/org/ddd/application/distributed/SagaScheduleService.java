@@ -158,7 +158,7 @@ public class SagaScheduleService {
             return;
         }
         rollbackRunning = true;
-        //trySleep(rollbackDelayMillis);
+        trySleep(rollbackDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
