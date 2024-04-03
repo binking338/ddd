@@ -116,14 +116,18 @@ public class SagaScheduleService {
                         continue;
                     }
                     for (Saga saga : sagas.toList()) {
-                        log.info("SAGA事务补偿: %s", saga.toString());
+                        log.info("SAGA事务补偿: {}", saga.toString());
                         LocalDateTime nextTryTime = saga.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {
                             delay = Duration.between(now, nextTryTime).getSeconds();
                         }
 
-                        saga = sagaSupervisor.holdState4Run(saga, nextTryTime);
+                        LocalDateTime time = nextTryTime;
+                        if(nextTryTime.isBefore(now.plusSeconds(interval.getSeconds() / 2))){
+                            time = now.plusSeconds(interval.getSeconds() / 2 + 1);
+                        }
+                        saga = sagaSupervisor.holdState4Run(saga, time);
                         final Saga fSaga = saga;
                         executor.schedule(() -> sagaSupervisor.resume(fSaga), delay, TimeUnit.SECONDS);
                     }
@@ -154,7 +158,7 @@ public class SagaScheduleService {
             return;
         }
         rollbackRunning = true;
-        trySleep(rollbackDelayMillis);
+        //trySleep(rollbackDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
@@ -189,14 +193,20 @@ public class SagaScheduleService {
                     }
 
                     for (Saga saga : sagas.toList()) {
-                        log.info("SAGA事务回滚补偿: %s", JSON.toJSONString(saga));
+                        log.info("SAGA事务回滚补偿: {}", JSON.toJSONString(saga));
                         LocalDateTime nextTryTime = saga.getNextTryTime();
                         long delay = 0;
                         if (nextTryTime.isAfter(now)) {
                             delay = Duration.between(now, nextTryTime).getSeconds();
                         }
-                        sagaSupervisor.holdState4Rollback(saga, nextTryTime);
-                        executor.schedule(() -> sagaSupervisor.rollback(saga), delay, TimeUnit.SECONDS);
+
+                        LocalDateTime time = nextTryTime;
+                        if(nextTryTime.isBefore(now.plusSeconds(interval.getSeconds() / 2))){
+                            time = now.plusSeconds(interval.getSeconds() / 2 + 1);
+                        }
+                        saga = sagaSupervisor.holdState4Rollback(saga, time);
+                        final Saga fSaga = saga;
+                        executor.schedule(() -> sagaSupervisor.rollback(fSaga), delay, TimeUnit.SECONDS);
                     }
                 } catch (Exception ex) {
                     log.error("SAGA事务回滚补偿:异常失败", ex);

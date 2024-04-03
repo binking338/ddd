@@ -25,13 +25,15 @@ public @interface DomainEvent {
     String value() default "";
 
     /**
-     * 订阅者（通常作为MQ consumer group名称）
+     * 订阅者
+     * （通常作为MQ consumer group名称）
      * @return
      */
     String subscriber() default NONE_SUBSCRIBER;
 
     /**
      * 事件记录持久化
+     * 如果持久化，则事件发送失败或消费失败将会有重试机制
      *
      * @return
      */

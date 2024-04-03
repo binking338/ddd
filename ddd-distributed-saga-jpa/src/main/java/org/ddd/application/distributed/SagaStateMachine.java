@@ -48,9 +48,9 @@ public abstract class SagaStateMachine<Context> {
     }
 
     public Saga init(Context context, String uuid) {
-        if(!StringUtils.isEmpty(uuid)) {
+        if (!StringUtils.isEmpty(uuid)) {
             Saga saga = querySaga(uuid).orElse(null);
-            if(saga!=null){
+            if (saga != null) {
                 return saga;
             }
         }
@@ -68,26 +68,23 @@ public abstract class SagaStateMachine<Context> {
     public Saga holdState4Run(Saga saga, LocalDateTime time) {
         LocalDateTime now = time;
         LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        if(saga.startRunning(now, nextTryTime)) {
-            SagaWrapper sagaWrapper = new SagaWrapper();
-            sagaWrapper.setSaga(saga);
-            sagaWrapper.saveAndFlush(sagaJpaRepository);
-            return sagaWrapper.getSaga();
-        } else {
-            return saga;
-        }
+        saga.startRunning(now, nextTryTime);
+        SagaWrapper sagaWrapper = new SagaWrapper();
+        sagaWrapper.setSaga(saga);
+        sagaWrapper.saveAndFlush(sagaJpaRepository);
+        return sagaWrapper.getSaga();
     }
 
 
     public Saga run(Saga saga) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        if(saga.startRunning(now, nextTryTime)) {
+        if (saga.isRunnning(LocalDateTime.now())) {
             SagaWrapper sagaWrapper = new SagaWrapper();
             sagaWrapper.setSaga(saga);
-            sagaWrapper.saveAndFlush(sagaJpaRepository);
             configProcess((Context) saga.getContext(), sagaWrapper);
             sagaWrapper.getSaga().finishRunning();
+            if (sagaWrapper.getSaga().isFailed()) {
+                return rollback(holdState4Rollback(sagaWrapper.getSaga(), LocalDateTime.now()));
+            }
             sagaWrapper.saveAndFlush(sagaJpaRepository);
             return sagaWrapper.getSaga();
         } else {
@@ -98,24 +95,20 @@ public abstract class SagaStateMachine<Context> {
     public Saga holdState4Rollback(Saga saga, LocalDateTime time) {
         LocalDateTime now = time;
         LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        if(saga.startRollback(now, nextTryTime)) {
-            SagaWrapper sagaWrapper = new SagaWrapper();
-            sagaWrapper.setSaga(saga);
-            sagaWrapper.saveAndFlush(sagaJpaRepository);
-            return sagaWrapper.getSaga();
-        } else {
-            return saga;
-        }
+        saga.startRollback(now, nextTryTime);
+        SagaWrapper sagaWrapper = new SagaWrapper();
+        sagaWrapper.setSaga(saga);
+        sagaWrapper.saveAndFlush(sagaJpaRepository);
+        return sagaWrapper.getSaga();
     }
 
     public Saga rollback(Saga saga) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        if(saga.startRollback(now, nextTryTime)) {
+        if (saga.isRollbacking(LocalDateTime.now())) {
             SagaWrapper sagaWrapper = new SagaWrapper();
             sagaWrapper.setSaga(saga);
             configRollback(sagaWrapper);
             sagaWrapper.getSaga().finishRollback();
+            sagaWrapper.saveAndFlush(sagaJpaRepository);
             return sagaWrapper.getSaga();
         } else {
             return saga;
@@ -196,7 +189,7 @@ public abstract class SagaStateMachine<Context> {
             log.error("SAGA type=[" + clazz.getTypeName() + "]没有声明任何SagaProcess方法！");
             throw new RuntimeException("没有声明任何SagaProcess方法！");
         }
-        Object input = null;
+        Object input = context;
         Object output = null;
         for (Method method : sagaProcessMethods) {
             output = process(method, input, saga);
@@ -206,20 +199,18 @@ public abstract class SagaStateMachine<Context> {
 
     protected void configRollback(SagaWrapper saga) {
         Class clazz = this.getClass();
-        List<Method> sagaProcessMethods = Arrays.stream(clazz.getDeclaredMethods())
+        List<Method> sagaRollbackMethods = Arrays.stream(clazz.getDeclaredMethods())
                 .filter(m -> m.getAnnotation(SagaRollback.class) != null)
-                .sorted((m1, m2) -> m1.getAnnotation(SagaProcess.class).code() - m2.getAnnotation(SagaProcess.class).code())
+                .sorted((m1, m2) -> m2.getAnnotation(SagaRollback.class).code() - m1.getAnnotation(SagaRollback.class).code())
                 .collect(Collectors.toList());
-        if (sagaProcessMethods.size() == 0) {
+        if (sagaRollbackMethods.size() == 0) {
             return;
         }
-        for (Method method : sagaProcessMethods) {
+        for (Method method : sagaRollbackMethods) {
             if (!rollback(method, saga)) {
                 return;
             }
         }
-        saga.getSaga().finishRollback();
-        saga.saveAndFlush(sagaJpaRepository);
     }
 
 
@@ -240,6 +231,7 @@ public abstract class SagaStateMachine<Context> {
                 saga.saveAndFlush(sagaJpaRepository);
             }
         }
+        process = saga.getSaga().findProcess(code);
         Output output = null;
         try {
             output = handler.process(input, (Context) saga.getSaga().getContext());
@@ -258,21 +250,23 @@ public abstract class SagaStateMachine<Context> {
             return false;
         } else if (Saga.SagaState.ROLLBACKED.equals(process.getProcessState())) {
             return true;
-        } else {
-            process.startRollback();
-            saga.saveAndFlush(sagaJpaRepository);
         }
+        process.startRollback();
+        saga.saveAndFlush(sagaJpaRepository);
+
         Context context = (Context) saga.getSaga().getContext();
         try {
-            handler.rollback((Input) process.getInput(), (Output) process.getOutput(), context);
-            process.finishRollback();
-            saga.saveAndFlush(sagaJpaRepository);
+            if(handler.rollback((Input) process.getInput(), (Output) process.getOutput(), context)) {
+                process = saga.getSaga().findProcess(code);
+                process.finishRollback();
+                saga.saveAndFlush(sagaJpaRepository);
+                return true;
+            }
         } catch (Exception ex) {
             process.fail(ex);
             saga.saveAndFlush(sagaJpaRepository);
-            return false;
         }
-        return true;
+        return false;
     }
 
     protected <Input, Output> boolean rollback(Method method, SagaWrapper saga) {
@@ -299,13 +293,16 @@ public abstract class SagaStateMachine<Context> {
             } else if (parameterTypes.length == 3) {
                 params = new Object[]{i, o, c};
             }
-            boolean result = false;
+            Object result = null;
             try {
-                result = (boolean) method.invoke(_this, params);
+                result = method.invoke(_this, params);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
-            return result;
+            if(result instanceof Boolean){
+                return ((Boolean) result).booleanValue();
+            }
+            return true;
         };
         return rollback(handler, annotation.code(), saga);
     }

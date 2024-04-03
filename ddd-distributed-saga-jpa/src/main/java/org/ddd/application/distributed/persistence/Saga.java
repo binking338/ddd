@@ -57,78 +57,102 @@ public class Saga {
         this.processes = sagaProcesses;
     }
 
-    public boolean startRunning(LocalDateTime now, LocalDateTime nextTryTime) {
+    public boolean isRunnning(LocalDateTime now) {
+        return SagaState.RUNNING.equals(this.sagaState) && now.isBefore(this.nextTryTime);
+    }
+
+    public boolean isFailed() {
+        return SagaState.FAILED.equals(this.sagaState);
+    }
+
+    public boolean isDone() {
+        return SagaState.DONE.equals(this.sagaState);
+    }
+
+    public void startRunning(LocalDateTime now, LocalDateTime nextTryTime) {
         if (triedTimes >= tryTimes) {
             this.sagaState = SagaState.FAILED;
-            return false;
+            return;
         }
         if (expireAt.isBefore(now)) {
             this.sagaState = SagaState.EXPIRED;
-            return false;
+            return;
         }
         if (SagaState.RUNNING.equals(this.sagaState) && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
-            return true;
+            return;
         }
         if (!SagaState.INIT.equals(this.sagaState)
                 && !SagaState.RUNNING.equals(this.sagaState)) {
-            return false;
+            return;
         }
         this.sagaState = SagaState.RUNNING;
         this.triedTimes++;
         this.lastTryTime = now;
         this.nextTryTime = nextTryTime;
-        return true;
     }
 
     public void finishRunning() {
-        syncContextData();
+        if (this.processes != null && !this.processes.isEmpty()
+                && this.processes.stream().allMatch(p -> SagaState.DONE.equals(p.getProcessState()))) {
+            done();
+            return;
+        }
+        if (triedTimes >= tryTimes) {
+            fail();
+            return;
+        }
+    }
+
+    private void done() {
         this.sagaState = SagaState.DONE;
     }
 
+    private void fail() {
+        this.sagaState = SagaState.FAILED;
+    }
+
     public void cancel() {
-        syncContextData();
         this.sagaState = SagaState.CANCEL;
     }
 
-    public void fail() {
-        syncContextData();
-        if (triedTimes >= tryTimes) {
-            this.sagaState = SagaState.FAILED;
-        } else {
-            this.sagaState = SagaState.RUNNING;
-        }
+    public boolean isRollbacking(LocalDateTime now) {
+        return SagaState.ROLLBACKING.equals(this.sagaState) && now.isBefore(this.nextTryTime);
     }
 
-    public boolean startRollback(LocalDateTime now, LocalDateTime nextTryTime) {
+    public void startRollback(LocalDateTime now, LocalDateTime nextTryTime) {
         if (expireAt.isBefore(now)) {
             this.sagaState = SagaState.EXPIRED;
-            return false;
+            return;
         }
         if (SagaState.ROLLBACKING.equals(this.sagaState)
                 && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
-            return true;
+            return;
         }
-        if (!SagaState.FAILED.equals(this.sagaState)) {
-            return false;
+        if (!SagaState.FAILED.equals(this.sagaState) && !SagaState.ROLLBACKING.equals(this.sagaState)) {
+            return;
         }
         this.nextTryTime = nextTryTime;
         this.sagaState = SagaState.ROLLBACKING;
-        return true;
     }
 
     public void finishRollback() {
-        syncContextData();
-        this.sagaState = SagaState.ROLLBACKED;
+        if (this.processes != null && !this.processes.isEmpty()
+                && this.processes.stream().allMatch(p -> SagaState.ROLLBACKED.equals(p.getProcessState()))) {
+            this.sagaState = SagaState.ROLLBACKED;
+            return;
+        } else {
+            this.sagaState = SagaState.FAILED;
+        }
     }
 
     public SagaProcess findProcess(Integer processCode) {
-        return  processes == null
+        return processes == null
                 ? null
-                :  processes.stream().filter(p -> (Objects.equals(p.processCode, processCode))).findFirst().orElse(null);
+                : processes.stream().filter(p -> (Objects.equals(p.processCode, processCode))).findFirst().orElse(null);
     }
 
     public void addProcess(Saga.SagaProcess process) {
-        if(this.processes == null){
+        if (this.processes == null) {
             this.processes = new ArrayList<>();
         }
         this.processes.add(process);
@@ -137,12 +161,12 @@ public class Saga {
     @Transient
     private Object context = null;
 
-    public void syncContextData(){
+    public void syncContextData() {
         this.contextData = JSON.toJSONString(getContext());
     }
 
     public Object getContext() {
-        if(this.context != null){
+        if (this.context != null) {
             return this.context;
         }
         Class ctxClass = null;
