@@ -45,14 +45,6 @@ public class SagaScheduleService {
     private final SagaSupervisor sagaSupervisor;
     private final Locker locker;
 
-    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE)
-    private int threadPoolsize;
-    private ScheduledThreadPoolExecutor executor = null;
-    @PostConstruct
-    public void init(){
-        executor = executor = new ScheduledThreadPoolExecutor(threadPoolsize);
-    }
-
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
@@ -68,7 +60,6 @@ public class SagaScheduleService {
     }
 
     private boolean compensationRunning = false;
-    private int compensationDelayMillis = 0;
 
     public void compensation(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
         if (compensationRunning) {
@@ -76,7 +67,6 @@ public class SagaScheduleService {
             return;
         }
         compensationRunning = true;
-        trySleep(compensationDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
@@ -86,12 +76,10 @@ public class SagaScheduleService {
             if (CollectionUtils.isEmpty(sagaSupervisor.getSupportedBizTypes())) {
                 return;
             }
+            LocalDateTime now = LocalDateTime.now();
             while (!noneSaga) {
                 try {
-                    LocalDateTime now = LocalDateTime.now();
                     if (!this.locker.acquire(lockerKey, pwd, maxLockDuration)) {
-                        trySleep(interval.getSeconds() * 1000 / maxConcurrency);
-                        compensationDelayMillis = (int) ((compensationDelayMillis + (interval.getSeconds() * 1000 / maxConcurrency)) % (interval.getSeconds() * 1000));
                         return;
                     }
                     Page<Saga> sagas = sagaJpaRepository.findAll((root, cq, cb) -> {
@@ -99,13 +87,13 @@ public class SagaScheduleService {
                                 cb.and(
                                         // 【初始状态】
                                         cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.INIT),
-                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         root.get(Saga.F_BIZ_TYPE).in(sagaSupervisor.getSupportedBizTypes()),
                                         cb.equal(root.get(Saga.F_SVC_NAME), svcName)
                                 ), cb.and(
                                         // 【未知状态】
                                         cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.RUNNING),
-                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         root.get(Saga.F_BIZ_TYPE).in(sagaSupervisor.getSupportedBizTypes()),
                                         cb.equal(root.get(Saga.F_SVC_NAME), svcName)
                                 )));
@@ -117,19 +105,7 @@ public class SagaScheduleService {
                     }
                     for (Saga saga : sagas.toList()) {
                         log.info("SAGA事务补偿: {}", saga.toString());
-                        LocalDateTime nextTryTime = saga.getNextTryTime();
-                        long delay = 0;
-                        if (nextTryTime.isAfter(now)) {
-                            delay = Duration.between(now, nextTryTime).getSeconds();
-                        }
-
-                        LocalDateTime time = nextTryTime;
-                        if(nextTryTime.isBefore(now.plusSeconds(interval.getSeconds() / 2))){
-                            time = now.plusSeconds(interval.getSeconds() / 2 + 1);
-                        }
-                        saga = sagaSupervisor.holdState4Run(saga, time);
-                        final Saga fSaga = saga;
-                        executor.schedule(() -> sagaSupervisor.resume(fSaga), delay, TimeUnit.SECONDS);
+                        sagaSupervisor.resume(saga);
                     }
                 } catch (Exception ex) {
                     log.error("SAGA事务补偿:异常失败", ex);
@@ -150,7 +126,6 @@ public class SagaScheduleService {
     }
 
     private boolean rollbackRunning = false;
-    private int rollbackDelayMillis = 0;
 
     public void rollback(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
         if (rollbackRunning) {
@@ -158,7 +133,6 @@ public class SagaScheduleService {
             return;
         }
         rollbackRunning = true;
-        trySleep(rollbackDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
@@ -168,21 +142,19 @@ public class SagaScheduleService {
             if (CollectionUtils.isEmpty(sagaSupervisor.getSupportedBizTypes())) {
                 return;
             }
+            LocalDateTime now = LocalDateTime.now();
             while (!noneSaga) {
                 try {
                     if (!this.locker.acquire(lockerKey, pwd, maxLockDuration)) {
-                        trySleep(interval.getSeconds() * 1000 / maxConcurrency);
-                        rollbackDelayMillis = (int) ((rollbackDelayMillis + (interval.getSeconds() * 1000 / maxConcurrency)) % (interval.getSeconds() * 1000));
                         return;
                     }
-                    LocalDateTime now = LocalDateTime.now();
                     Page<Saga> sagas = sagaJpaRepository.findAll((root, cq, cb) -> {
                         cq.where(
                                 cb.and(
                                         // 【回滚状态】
                                         cb.equal(root.get(Saga.F_SAGA_STATE), Saga.SagaState.ROLLBACKING),
                                         root.get(Saga.F_BIZ_TYPE).in(sagaSupervisor.getSupportedBizTypes()),
-                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(Saga.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(Saga.F_SVC_NAME), svcName)
                                 ));
                         return null;
@@ -194,19 +166,7 @@ public class SagaScheduleService {
 
                     for (Saga saga : sagas.toList()) {
                         log.info("SAGA事务回滚补偿: {}", JSON.toJSONString(saga));
-                        LocalDateTime nextTryTime = saga.getNextTryTime();
-                        long delay = 0;
-                        if (nextTryTime.isAfter(now)) {
-                            delay = Duration.between(now, nextTryTime).getSeconds();
-                        }
-
-                        LocalDateTime time = nextTryTime;
-                        if(nextTryTime.isBefore(now.plusSeconds(interval.getSeconds() / 2))){
-                            time = now.plusSeconds(interval.getSeconds() / 2 + 1);
-                        }
-                        saga = sagaSupervisor.holdState4Rollback(saga, time);
-                        final Saga fSaga = saga;
-                        executor.schedule(() -> sagaSupervisor.rollback(fSaga), delay, TimeUnit.SECONDS);
+                        sagaSupervisor.rollback(saga);
                     }
                 } catch (Exception ex) {
                     log.error("SAGA事务回滚补偿:异常失败", ex);

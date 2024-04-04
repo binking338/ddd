@@ -31,7 +31,7 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         return this.svcName;
     }
 
-    private boolean isExists(String uuid){
+    private boolean isExists(String uuid) {
         long count = taskRecordJpaRepository.count((root, query, cb) -> {
             query.where(
                     cb.and(
@@ -44,7 +44,7 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         return count > 0;
     }
 
-    private Optional<TaskRecord> queryTaskRecord(String uuid){
+    private Optional<TaskRecord> queryTaskRecord(String uuid) {
         Optional<TaskRecord> taskRecord = taskRecordJpaRepository.findAll((root, query, cb) -> {
             query.where(
                     cb.and(
@@ -53,24 +53,14 @@ public class JpaTaskSupervisor implements TaskSupervisor {
                     )
             );
             return null;
-        }, PageRequest.of(0,1)).stream().findFirst();
+        }, PageRequest.of(0, 1)).stream().findFirst();
         return taskRecord;
     }
 
     @Override
     public <Param, Result, T extends Task<Param, Result>> boolean run(Class<T> taskClass, Param param, String uuid, Duration expire, int retryTimes) {
         // 检查是否有相同uuid的任务存在，如果已经成功执行，不重复执行
-        if (StringUtils.isNotBlank(uuid) && isExists(uuid)) {
-            log.warn("异步任务已提交，勿重复提交: " + uuid);
-            return false;
-        }
-        TaskRecord taskRecord = new TaskRecord();
-        LocalDateTime now = LocalDateTime.now();
-        taskRecord.init(uuid, taskClass, param, getSvcName(), now, now, expire, retryTimes);
-        taskRecord.beginRun(now);
-        taskRecord = taskRecordJpaRepository.save(taskRecord);
-        internalTaskRunner.run(taskRecord, Duration.ZERO);
-        return true;
+        return delay(taskClass, param, uuid, Duration.ZERO, expire, retryTimes);
     }
 
     @Override
@@ -84,13 +74,9 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         LocalDateTime schedule = now.plusSeconds(delay.getSeconds());
         TaskRecord taskRecord = new TaskRecord();
         taskRecord.init(uuid, taskClass, param, getSvcName(), now, schedule, expire, retryTimes);
-        if (delay.getSeconds() == 0) {
-            taskRecord.beginRun(schedule);
-            taskRecord = taskRecordJpaRepository.save(taskRecord);
-            internalTaskRunner.run(taskRecord, delay);
-        } else {
-            taskRecordJpaRepository.save(taskRecord);
-        }
+        taskRecord.holdState4Run(schedule);
+        taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);
+        internalTaskRunner.run(taskRecord, delay);
         return true;
     }
 
@@ -98,31 +84,31 @@ public class JpaTaskSupervisor implements TaskSupervisor {
         return queryTaskRecord(uuid).orElse(null);
     }
 
-
-    public boolean copyAndRun(String sourceUuid, String uuid){
+    public boolean resume(TaskRecord taskRecord) {
         LocalDateTime now = LocalDateTime.now();
-        TaskRecord source = queryTaskRecord(sourceUuid).orElseThrow(() -> new RuntimeException(String.format("不存在的任务 source_uuid = %s", sourceUuid)));
-        TaskRecord taskRecord = TaskRecord.builder().build();
-        taskRecord.initFrom(source, uuid, now);
-        taskRecord.beginRun(now);
-        taskRecord = taskRecordJpaRepository.save(taskRecord);
+        LocalDateTime nextTryTime = taskRecord.getNextTryTime();
+        if (now.isBefore(nextTryTime)) {
+            return false;
+        }
+        taskRecord.holdState4Run(now);
+        taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);
         internalTaskRunner.run(taskRecord, Duration.ZERO);
         return true;
     }
 
-    public boolean copyAndDelay(String sourceUuid, String uuid, Duration delay){
+    public boolean copyAndRun(String sourceUuid, String uuid) {
+        return copyAndDelay(sourceUuid, uuid, Duration.ZERO);
+    }
+
+    public boolean copyAndDelay(String sourceUuid, String uuid, Duration delay) {
         LocalDateTime now = LocalDateTime.now();
         TaskRecord source = queryTaskRecord(sourceUuid).orElseThrow(() -> new RuntimeException(String.format("不存在的任务 source_uuid = %s", sourceUuid)));
         TaskRecord taskRecord = TaskRecord.builder().build();
         LocalDateTime schedule = now.plusSeconds(delay.getSeconds());
         taskRecord.initFrom(source, uuid, schedule);
-        if (delay.getSeconds() == 0) {
-            taskRecord.beginRun(schedule);
-            taskRecord = taskRecordJpaRepository.save(taskRecord);
-            internalTaskRunner.run(taskRecord, delay);
-        } else {
-            taskRecordJpaRepository.save(taskRecord);
-        }
+        taskRecord.holdState4Run(schedule);
+        taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);
+        internalTaskRunner.run(taskRecord, delay);
         return true;
     }
 }

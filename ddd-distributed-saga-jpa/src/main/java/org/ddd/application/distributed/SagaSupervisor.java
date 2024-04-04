@@ -8,10 +8,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.util.Assert;
 
+import javax.annotation.PostConstruct;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.ddd.share.Constants.CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE;
 import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 
 /**
@@ -27,6 +33,14 @@ public class SagaSupervisor {
     protected String svcName;
     @Autowired
     private SagaJpaRepository sagaJpaRepository;
+
+    @Value(CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE)
+    private int threadPoolsize;
+    private ThreadPoolExecutor executor = null;
+    @PostConstruct
+    public void init(){
+        executor = new ThreadPoolExecutor(threadPoolsize, threadPoolsize, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+    }
 
     public SagaSupervisor(List<SagaStateMachine> sagaStateMachineContextClassMap) {
         if (sagaStateMachineContextClassMap != null && !sagaStateMachineContextClassMap.isEmpty()) {
@@ -87,7 +101,7 @@ public class SagaSupervisor {
         SagaStateMachine<Context> sagaStateMachine = sagaStateMachineContextClassMap.get(context.getClass()).get(0);
         Saga saga = sagaStateMachine.init(context, uuid);
         if(runImmediately){
-            sagaStateMachine.run(saga);
+            saga = sagaStateMachine.run(saga);
         }
         return saga;
     }
@@ -120,7 +134,7 @@ public class SagaSupervisor {
         SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(bizType);
         Saga saga = sagaStateMachine.init(context, uuid);
         if(runImmediately){
-            sagaStateMachine.run(saga);
+            saga = sagaStateMachine.run(saga);
         }
         return saga;
     }
@@ -144,24 +158,7 @@ public class SagaSupervisor {
 
 
     /**
-     * 开始复原Saga
-     *
-     * @param saga
-     * @param time
-     * @return
-     */
-    public Saga holdState4Run(Saga saga, LocalDateTime time) {
-        Assert.notNull(saga, "saga 参数不得为空");
-        SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(saga.getBizType());
-        if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
-            throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
-        }
-        Saga newSaga = sagaStateMachine.holdState4Run(saga, time);
-        return newSaga;
-    }
-
-    /**
-     * 恢复Saga流程
+     * 重试Saga
      *
      * @param saga
      * @return
@@ -172,24 +169,14 @@ public class SagaSupervisor {
         if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
             throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
         }
-        Saga newSaga = sagaStateMachine.run(saga);
-        return newSaga;
-    }
+        LocalDateTime now = LocalDateTime.now();
 
-    /**
-     * 回滚Saga流程
-     *
-     * @param saga
-     * @param time
-     * @return
-     */
-    public Saga holdState4Rollback(Saga saga, LocalDateTime time) {
-        Assert.notNull(saga, "saga 参数不得为空");
-        SagaStateMachine sagaStateMachine = sagaStateMachineBizTypeMap.get(saga.getBizType());
-        if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
-            throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
+        final Saga newSaga = sagaStateMachine.holdState4Run(saga, now);
+        if(newSaga.isRunnning(now)) {
+            executor.submit(() -> sagaStateMachine.run(newSaga));
+        } else if(newSaga.isFailed()) {
+            rollback(newSaga);
         }
-        Saga newSaga = sagaStateMachine.holdState4Rollback(saga, time);
         return newSaga;
     }
 
@@ -205,7 +192,11 @@ public class SagaSupervisor {
         if (!sagaStateMachine.getContextClass().getName().equalsIgnoreCase(saga.getContextDataType())) {
             throw new UnsupportedOperationException("bizType不匹配 sagaId=" + saga.getId());
         }
-        Saga newSaga = sagaStateMachine.rollback(saga);
+        LocalDateTime now = LocalDateTime.now();
+        final Saga newSaga = sagaStateMachine.holdState4Rollback(saga, now);
+        if(newSaga.isRollbacking(now)) {
+            executor.submit(() -> sagaStateMachine.rollback(newSaga));
+        }
         return newSaga;
     }
 }

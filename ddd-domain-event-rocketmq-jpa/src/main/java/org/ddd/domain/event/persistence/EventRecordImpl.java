@@ -1,6 +1,5 @@
 package org.ddd.domain.event.persistence;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.ddd.domain.event.EventRecord;
 
@@ -40,7 +39,7 @@ public class EventRecordImpl implements EventRecord {
 
     @Override
     public boolean beginDelivery(LocalDateTime now) {
-        return event.beginDelivery(now);
+        return event.holdState4Delivery(now);
     }
 
     @Override

@@ -95,23 +95,32 @@ public class Event {
                 : payload.getClass().getAnnotation(Retry.class);
         if (retry != null) {
             this.tryTimes = retry.retryTimes();
-            this.expireAt = this.createAt.plusSeconds(retry.expireAfter());
+            this.expireAt = this.createAt.plusMinutes(retry.expireAfter());
         }
     }
 
-    public boolean beginDelivery(LocalDateTime now) {
+    public boolean isConfirming(LocalDateTime now) {
+        return EventState.COMFIRMING.equals(this.eventState)
+                && now.isBefore(this.nextTryTime);
+    }
+
+    public boolean holdState4Delivery(LocalDateTime now) {
+        // 超过重试次数
         if (this.triedTimes >= this.tryTimes) {
             this.eventState = EventState.FAILED;
             return false;
         }
+        // 事件过期
         if (now.isAfter(this.expireAt)) {
             this.eventState = EventState.EXPIRED;
             return false;
         }
+        // 初始状态或者确认中状态
         if (!EventState.INIT.equals(this.eventState)
                 && !EventState.COMFIRMING.equals(this.eventState)) {
             return false;
         }
+        // 未到下次重试时间
         if (this.nextTryTime != null && this.nextTryTime.isAfter(now)) {
             return false;
         }
@@ -127,12 +136,8 @@ public class Event {
                 ? null
                 : getPayload().getClass().getAnnotation(Retry.class);
         if (Objects.isNull(retry) || retry.retryIntervals().length == 0) {
-            if (this.triedTimes <= 3) {
-                return now.plusSeconds(10);
-            } else if (this.triedTimes <= 6) {
-                return now.plusSeconds(30);
-            } else if (this.triedTimes <= 10) {
-                return now.plusSeconds(60);
+            if (this.triedTimes <= 10) {
+                return now.plusMinutes(1);
             } else if (this.triedTimes <= 20) {
                 return now.plusMinutes(5);
             } else {
@@ -145,7 +150,7 @@ public class Event {
         } else if (index < 0) {
             index = 0;
         }
-        return now.plusSeconds(retry.retryIntervals()[index]);
+        return now.plusMinutes(retry.retryIntervals()[index]);
     }
 
     public void confirmedDelivered(LocalDateTime now) {

@@ -19,7 +19,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -35,7 +36,7 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
  */
 @RequiredArgsConstructor
 @Slf4j
-public class EventScheduleService {
+public class JpaEventScheduleService {
     private static final String KEY_COMPENSATION_LOCKER = "event_compensation[" + CONFIG_KEY_4_SVC_NAME + "]";
     private static final String KEY_ARCHIVE_LOCKER = "event_archive[" + CONFIG_KEY_4_SVC_NAME + "]";
 
@@ -46,11 +47,11 @@ public class EventScheduleService {
 
     @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE)
     private int threadPoolsize;
-    private ScheduledThreadPoolExecutor executor = null;
+    private ThreadPoolExecutor executor = null;
 
     @PostConstruct
-    public void init(){
-        executor =  new ScheduledThreadPoolExecutor(threadPoolsize);
+    public void init() {
+        executor = new ThreadPoolExecutor(threadPoolsize, threadPoolsize, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
     }
 
     @Value(CONFIG_KEY_4_SVC_NAME)
@@ -68,7 +69,6 @@ public class EventScheduleService {
     }
 
     private boolean compensationRunning = false;
-    private int compensationDelayMillis = 0;
 
     public void compensation(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
         if (compensationRunning) {
@@ -76,19 +76,16 @@ public class EventScheduleService {
             return;
         }
         compensationRunning = true;
-        trySleep(compensationDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
         String lockerKey = getCompensationLockerKey();
         try {
             boolean noneEvent = false;
+            LocalDateTime now = LocalDateTime.now();
             while (!noneEvent) {
-                LocalDateTime now = LocalDateTime.now();
                 try {
                     if (!locker.acquire(lockerKey, pwd, maxLockDuration)) {
-                        trySleep(interval.getSeconds() * 1000 / maxConcurrency);
-                        compensationDelayMillis = (int) ((compensationDelayMillis + (interval.getSeconds() * 1000 / maxConcurrency)) % (interval.getSeconds() * 1000));
                         return;
                     }
                     Page<Event> events = eventJpaRepository.findAll((root, cq, cb) -> {
@@ -96,12 +93,12 @@ public class EventScheduleService {
                                 cb.and(
                                         // 【初始状态】
                                         cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.INIT),
-                                        cb.lessThan(root.get(Event.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(Event.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(Event.F_SVC_NAME), svcName)
                                 ), cb.and(
                                         // 【未知状态】
                                         cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.COMFIRMING),
-                                        cb.lessThan(root.get(Event.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(Event.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(Event.F_SVC_NAME), svcName)
                                 )));
                         return null;
@@ -112,16 +109,13 @@ public class EventScheduleService {
                     }
                     for (Event event : events.getContent()) {
                         log.info("事件发送补偿: {}", event.toString());
-                        LocalDateTime nextTryTime = event.getNextTryTime();
-                        long delay = 0;
-                        if (nextTryTime.isAfter(now)) {
-                            delay = Duration.between(now, nextTryTime).getSeconds();
-                        }
-                        event.beginDelivery(nextTryTime);
+                        event.holdState4Delivery(now);
                         event = eventJpaRepository.saveAndFlush(event);
-                        EventRecordImpl eventRecordImpl = new EventRecordImpl();
-                        eventRecordImpl.resume(event);
-                        executor.schedule(() -> domainEventPublisher.publish(eventRecordImpl), delay, TimeUnit.SECONDS);
+                        if(event.isConfirming(now)) {
+                            EventRecordImpl eventRecordImpl = new EventRecordImpl();
+                            eventRecordImpl.resume(event);
+                            executor.submit(() -> domainEventPublisher.publish(eventRecordImpl));
+                        }
                     }
                 } catch (Exception ex) {
                     log.error("事件发送补偿:异常失败", ex);
@@ -220,7 +214,7 @@ public class EventScheduleService {
     }
 
     public void addPartition() {
-        Date now  = new Date();
+        Date now = new Date();
         addPartition("__event", DateUtils.addMonths(now, 1));
         addPartition("__archived_event", DateUtils.addMonths(now, 1));
     }
@@ -229,6 +223,7 @@ public class EventScheduleService {
 
     /**
      * 创建date日期所在月下个月的分区
+     *
      * @param table
      * @param date
      */

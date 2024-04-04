@@ -22,14 +22,14 @@ public @interface Retry {
     int retryTimes() default 15;
 
     /**
-     * 重试时间间隔，单位秒
+     * 重试时间间隔，单位分钟
      * @return
      */
     int[] retryIntervals() default {};
 
     /**
-     * 过期时长，单位秒，默认一天
+     * 过期时长，单位分钟，默认一天
      * @return
      */
-    int expireAfter() default 86400;
+    int expireAfter() default 1440;
 }

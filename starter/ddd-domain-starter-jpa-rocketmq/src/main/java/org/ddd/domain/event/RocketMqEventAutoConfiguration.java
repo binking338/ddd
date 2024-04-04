@@ -73,13 +73,13 @@ public class RocketMqEventAutoConfiguration {
     }
 
     @Bean
-    public EventScheduleService eventScheduleService(DomainEventPublisher domainEventPublisher) {
-        scheduleService = new EventScheduleService(locker, domainEventPublisher, eventJpaRepository, archivedEventJpaRepository, jdbcTemplate);
+    public JpaEventScheduleService eventScheduleService(DomainEventPublisher domainEventPublisher) {
+        scheduleService = new JpaEventScheduleService(locker, domainEventPublisher, eventJpaRepository, archivedEventJpaRepository, jdbcTemplate);
         scheduleService.addPartition();
         return scheduleService;
     }
 
-    private EventScheduleService scheduleService = null;
+    private JpaEventScheduleService scheduleService = null;
     @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_BATCHSIZE)
     private int batchSize;
     @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_MAXCONCURRENT)

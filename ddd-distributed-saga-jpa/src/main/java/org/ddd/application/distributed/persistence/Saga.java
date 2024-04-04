@@ -10,6 +10,7 @@ import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import javax.persistence.*;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -40,7 +41,7 @@ public class Saga {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void init(LocalDateTime now, String svcName, String bizType, Object context, String uuid, LocalDateTime nextTryTime, int expireInSeconds, int retryTimes, List<SagaProcess> sagaProcesses) {
+    public void init(LocalDateTime now, String svcName, String bizType, Object context, String uuid, LocalDateTime nextTryTime, Duration expire, int retryTimes, List<SagaProcess> sagaProcesses) {
         this.sagaUuid = StringUtils.isNotBlank(uuid) ? uuid : UUID.randomUUID().toString();
         this.svcName = svcName;
         this.bizType = bizType;
@@ -49,7 +50,7 @@ public class Saga {
         this.contextDataType = context == null ? Object.class.getName() : context.getClass().getName();
         this.sagaState = SagaState.INIT;
         this.createAt = now;
-        this.expireAt = now.plusSeconds(expireInSeconds);
+        this.expireAt = now.plus(expire);
         this.tryTimes = retryTimes;
         this.triedTimes = 0;
         this.lastTryTime = LocalDateTime.of(1, 1, 1, 0, 0, 0);
@@ -69,26 +70,31 @@ public class Saga {
         return SagaState.DONE.equals(this.sagaState);
     }
 
-    public void startRunning(LocalDateTime now, LocalDateTime nextTryTime) {
+    public boolean holdState4Running(LocalDateTime now, LocalDateTime nextTryTime) {
+        // 超过重试次数
         if (triedTimes >= tryTimes) {
             this.sagaState = SagaState.FAILED;
-            return;
+            return false;
         }
+        // 流程过期
         if (expireAt.isBefore(now)) {
             this.sagaState = SagaState.EXPIRED;
-            return;
+            return false;
         }
-        if (SagaState.RUNNING.equals(this.sagaState) && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
-            return;
-        }
+        //
         if (!SagaState.INIT.equals(this.sagaState)
                 && !SagaState.RUNNING.equals(this.sagaState)) {
-            return;
+            return false;
+        }
+        // 未到下次重试时间
+        if (SagaState.RUNNING.equals(this.sagaState) && (this.nextTryTime != null && this.nextTryTime.isAfter(now))) {
+            return false;
         }
         this.sagaState = SagaState.RUNNING;
         this.triedTimes++;
         this.lastTryTime = now;
         this.nextTryTime = nextTryTime;
+        return true;
     }
 
     public void finishRunning() {

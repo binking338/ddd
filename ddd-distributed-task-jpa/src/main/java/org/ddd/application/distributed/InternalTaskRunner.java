@@ -50,10 +50,12 @@ public class InternalTaskRunner {
     }
 
     public void run(TaskRecord taskRecord, Duration delay) {
-        executor.schedule(() -> doRun(taskRecord), delay.getSeconds(), TimeUnit.SECONDS);
+        if(taskRecord.isConfirming(LocalDateTime.now())) {
+            executor.schedule(() -> doRun(taskRecord), delay.getSeconds(), TimeUnit.SECONDS);
+        }
     }
 
-    public Object doRun(TaskRecord taskRecord) {
+    private Object doRun(TaskRecord taskRecord) {
         log.info("正在执行异步任务: {}", taskRecord.toString());
         Task task = resolveTask(taskRecord.getTaskClass());
         Object result = null;

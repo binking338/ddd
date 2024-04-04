@@ -1,6 +1,5 @@
 package org.ddd.application.distributed;
 
-import com.alibaba.fastjson.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -31,14 +30,14 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
  */
 @RequiredArgsConstructor
 @Slf4j
-public class TaskScheduleService {
+public class JpaTaskScheduleService {
     private static final String KEY_COMPENSATION_LOCKER = "task_compensation[" + CONFIG_KEY_4_SVC_NAME + "]";
     private static final String KEY_ARCHIVE_LOCKER = "task_archive[" + CONFIG_KEY_4_SVC_NAME + "]";
 
     private final Locker locker;
     private final TaskRecordJpaRepository taskRecordJpaRepository;
     private final ArchivedTaskRecordJpaRepository archivedTaskRecordJpaRepository;
-    private final InternalTaskRunner internalTaskRunner;
+    private final JpaTaskSupervisor jpaTaskSupervisor;
 
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
@@ -55,7 +54,6 @@ public class TaskScheduleService {
     }
 
     private boolean compensationRunning = false;
-    private int compensationDelayMillis = 0;
 
     /**
      *
@@ -70,7 +68,6 @@ public class TaskScheduleService {
             return;
         }
         compensationRunning = true;
-        trySleep(compensationDelayMillis);
 
         String pwd = RandomStringUtils.random(8, true, true);
         String svcName = getSvcName();
@@ -81,8 +78,6 @@ public class TaskScheduleService {
                 LocalDateTime now = LocalDateTime.now();
                 try {
                     if (!locker.acquire(lockerKey, pwd, maxLockDuration)) {
-                        trySleep(interval.getSeconds() * 1000 / maxConcurrency);
-                        compensationDelayMillis = (int) ((compensationDelayMillis + (interval.getSeconds() * 1000 / maxConcurrency)) % (interval.getSeconds() * 1000));
                         return;
                     }
                     Page<TaskRecord> tasks = taskRecordJpaRepository.findAll((root, cq, cb) -> {
@@ -90,12 +85,12 @@ public class TaskScheduleService {
                                 cb.and(
                                         // 【初始状态】
                                         cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.INIT),
-                                        cb.lessThan(root.get(TaskRecord.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(TaskRecord.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(TaskRecord.F_SVC_NAME), svcName)
                                 ), cb.and(
                                         // 【未知状态】
                                         cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.COMFIRMING),
-                                        cb.lessThan(root.get(TaskRecord.F_NEXT_TRY_TIME), now.plusSeconds(interval.getSeconds() / 2)),
+                                        cb.lessThan(root.get(TaskRecord.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(TaskRecord.F_SVC_NAME), svcName)
                                 )));
                         return null;
@@ -106,11 +101,9 @@ public class TaskScheduleService {
                     }
                     for (TaskRecord taskRecord : tasks.getContent()) {
                         log.info("异步任务补偿: {}", taskRecord.toString());
-                        LocalDateTime nextTryTime = taskRecord.getNextTryTime();
-                        taskRecord.beginRun(nextTryTime);
-                        taskRecord = taskRecordJpaRepository.saveAndFlush(taskRecord);
-                        Duration delay = nextTryTime.isAfter(now) ? Duration.between(now, nextTryTime) : Duration.ZERO;
-                        internalTaskRunner.run(taskRecord, delay);
+                        if(!jpaTaskSupervisor.resume(taskRecord)){
+                            log.warn("异步任务补偿：恢复失败 {}", taskRecord.toString());
+                        }
                     }
                 } catch (Exception ex) {
                     log.error("异步任务补偿:异常失败", ex);
@@ -164,7 +157,7 @@ public class TaskScheduleService {
                                             cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.CANCEL),
                                             cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.EXPIRED),
                                             cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.FAILED),
-                                            cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.DELIVERED)
+                                            cb.equal(root.get(TaskRecord.F_TASK_STATE), TaskRecord.TaskState.DONE)
                                     ),
                                     cb.lessThan(root.get(TaskRecord.F_EXPIRE_AT), DateUtils.addDays(now, expireDays)))
                     );

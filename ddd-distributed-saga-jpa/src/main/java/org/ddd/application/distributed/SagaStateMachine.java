@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,18 +58,18 @@ public abstract class SagaStateMachine<Context> {
         Saga saga = Saga.builder().build();
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime nextTryTime = getNextTryTime(now, 0);
-        saga.init(now, svcName, getBizType(), context, uuid, nextTryTime, expireInSeconds(), retryTimes(), new ArrayList<>());
+        saga.init(now, svcName, getBizType(), context, uuid, nextTryTime, Duration.ofMinutes(expireInMinutes()), retryTimes(), new ArrayList<>());
         SagaWrapper sagaWrapper = new SagaWrapper();
         sagaWrapper.setSaga(saga);
         sagaWrapper.saveAndFlush(sagaJpaRepository);
-        saga.startRunning(now, nextTryTime);
+        saga.holdState4Running(now, nextTryTime);
         return sagaWrapper.getSaga();
     }
 
     public Saga holdState4Run(Saga saga, LocalDateTime time) {
         LocalDateTime now = time;
         LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        saga.startRunning(now, nextTryTime);
+        saga.holdState4Running(now, nextTryTime);
         SagaWrapper sagaWrapper = new SagaWrapper();
         sagaWrapper.setSaga(saga);
         sagaWrapper.saveAndFlush(sagaJpaRepository);
@@ -136,13 +137,13 @@ public abstract class SagaStateMachine<Context> {
      *
      * @return
      */
-    protected int expireInSeconds() {
+    protected int expireInMinutes() {
         Retry retry = this.getClass().getAnnotation(Retry.class);
         if (retry != null && retry.expireAfter() > 0) {
-            return retry.expireAfter();
+            return retry.expireAfter() ;
         }
         // 默认1天
-        return 60 * 60 * 24 * 1;
+        return 60 * 24 * 1;
     }
 
     /**
@@ -174,9 +175,9 @@ public abstract class SagaStateMachine<Context> {
             } else if (index < 0) {
                 index = 0;
             }
-            return now.plusSeconds(retry.retryIntervals()[index]);
+            return now.plusMinutes(retry.retryIntervals()[index]);
         }
-        return now.plusSeconds(600);
+        return now.plusMinutes(10);
     }
 
     protected void configProcess(Context context, SagaWrapper saga) {

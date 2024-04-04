@@ -49,16 +49,16 @@ public class TaskRecord {
     public static final String F_LAST_TRY_TIME = "lastTryTime";
     public static final String F_NEXT_TRY_TIME = "nextTryTime";
 
-    public void initFrom(TaskRecord from, String uuid, LocalDateTime now){
-        this.svcName  = from.getSvcName();
-        this.taskUuid  = StringUtils.isNotBlank(uuid)
+    public void initFrom(TaskRecord from, String uuid, LocalDateTime now) {
+        this.svcName = from.getSvcName();
+        this.taskUuid = StringUtils.isNotBlank(uuid)
                 ? uuid
                 : UUID.randomUUID().toString();
         this.copyFrom = from.getTaskUuid();
         this.taskType = from.getTaskType();
         this.loadParam(from.getParam());
         this.tryTimes = from.getTryTimes();
-        this.expireAt = now.plusSeconds(Duration.between(from.getCreateAt(), from.getExpireAt()).getSeconds());
+        this.expireAt = now.plusMinutes(Duration.between(from.getCreateAt(), from.getExpireAt()).getSeconds());
         this.createAt = now;
         this.taskState = TaskState.INIT;
         this.triedTimes = 0;
@@ -80,12 +80,12 @@ public class TaskRecord {
         Retry retry = taskClass.getAnnotation(Retry.class);
         if (retry != null) {
             this.tryTimes = retry.retryTimes();
-            this.expireAt = this.createAt.plusSeconds(retry.expireAfter());
+            this.expireAt = this.createAt.plusMinutes(retry.expireAfter());
         }
-        if(retryTimes>0){
+        if (retryTimes > 0) {
             this.tryTimes = retryTimes;
         }
-        if(expireAfter!=null && expireAfter.getSeconds() > 0){
+        if (expireAfter != null && expireAfter.getSeconds() > 0) {
             this.expireAt = schedule.plusSeconds((int) expireAfter.getSeconds());
         }
     }
@@ -118,42 +118,61 @@ public class TaskRecord {
                 : param.getClass().getName();
     }
 
-    public boolean beginRun(LocalDateTime now) {
+    public boolean isConfirming(LocalDateTime now) {
+        return TaskState.COMFIRMING.equals(this.taskState)
+                && now.isBefore(this.nextTryTime);
+    }
+
+    public boolean holdState4Run(LocalDateTime runTime) {
+        // 重试次数超限
         if (this.triedTimes >= this.tryTimes) {
             this.taskState = TaskState.FAILED;
             return false;
         }
-        if (now.isAfter(this.expireAt)) {
+        // 任务过期
+        if (runTime.isAfter(this.expireAt)) {
             this.taskState = TaskState.EXPIRED;
             return false;
         }
+        // 必须初始状态或者确认中状态
         if (!TaskState.INIT.equals(this.taskState)
                 && !TaskState.COMFIRMING.equals(this.taskState)) {
             return false;
         }
-        if (this.nextTryTime != null && this.nextTryTime.isAfter(now)) {
+        // 未到下次重试时间
+        if (this.nextTryTime != null && this.nextTryTime.isAfter(runTime)) {
             return false;
         }
         this.taskState = TaskState.COMFIRMING;
-        this.lastTryTime = now;
-        this.nextTryTime = calculateNextTryTime(now);
+        this.lastTryTime = runTime;
+        this.nextTryTime = calculateNextTryTime(runTime);
         this.triedTimes++;
         return true;
     }
 
-    private LocalDateTime calculateNextTryTime(LocalDateTime now) {
-        Retry retry = getParam() == null
-                ? null
-                : getParam().getClass().getAnnotation(Retry.class);
+    public void confirmedCompeleted(Object result, LocalDateTime now) {
+        this.result = JSON.toJSONString(result);
+        this.resultType = result == null
+                ? Object.class.getName()
+                : result.getClass().getName();
+        this.taskState = TaskState.DONE;
+    }
+
+    public void cancel(LocalDateTime now) {
+        this.taskState = TaskState.CANCEL;
+    }
+
+    private LocalDateTime calculateNextTryTime(LocalDateTime runTime) {
+        Retry retry = (Retry) getTaskClass().getAnnotation(Retry.class);
         if (retry == null || retry.retryIntervals().length == 0) {
             if (this.triedTimes <= 3) {
-                return now.plusMinutes(10);
+                return runTime.plusMinutes(10);
             } else if (this.triedTimes <= 6) {
-                return now.plusMinutes(30);
+                return runTime.plusMinutes(30);
             } else if (this.triedTimes <= 10) {
-                return now.plusMinutes(60);
+                return runTime.plusMinutes(60);
             } else {
-                return now.plusMinutes(60);
+                return runTime.plusMinutes(60);
             }
         }
         int index = this.triedTimes - 1;
@@ -162,19 +181,7 @@ public class TaskRecord {
         } else if (index < 0) {
             index = 0;
         }
-        return now.plusSeconds(retry.retryIntervals()[index]);
-    }
-
-    public void confirmedCompeleted(Object result, LocalDateTime now) {
-        this.result = JSON.toJSONString(result);
-        this.resultType = result == null
-                ? Object.class.getName()
-                : result.getClass().getName();
-        this.taskState = TaskState.DELIVERED;
-    }
-
-    public void cancel(LocalDateTime now) {
-        this.taskState = TaskState.CANCEL;
+        return runTime.plusMinutes(retry.retryIntervals()[index]);
     }
 
     public Class getTaskClass() {
@@ -352,7 +359,7 @@ public class TaskRecord {
         /**
          * 已发送
          */
-        DELIVERED(1, "delivered");
+        DONE(1, "done");
         @Getter
         private final Integer value;
         @Getter

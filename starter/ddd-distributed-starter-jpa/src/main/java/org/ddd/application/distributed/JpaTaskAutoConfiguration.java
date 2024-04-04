@@ -42,13 +42,13 @@ public class JpaTaskAutoConfiguration {
     }
 
     @Bean
-    public TaskScheduleService taskScheduleService(InternalTaskRunner taskRunner){
-        scheduleService = new TaskScheduleService(locker, taskRecordJpaRepository, archivedTaskRecordJpaRepository, taskRunner, jdbcTemplate);
+    public JpaTaskScheduleService taskScheduleService(JpaTaskSupervisor jpaTaskSupervisor){
+        scheduleService = new JpaTaskScheduleService(locker, taskRecordJpaRepository, archivedTaskRecordJpaRepository, jpaTaskSupervisor, jdbcTemplate);
         scheduleService.addPartition();
         return scheduleService;
     }
 
-    TaskScheduleService scheduleService = null;
+    JpaTaskScheduleService scheduleService = null;
     @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_BATCHSIZE)
     private int batchSize;
     @Value(CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_MAXCONCURRENT)
