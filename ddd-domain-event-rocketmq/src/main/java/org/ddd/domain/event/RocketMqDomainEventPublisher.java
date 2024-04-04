@@ -61,7 +61,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         } else {
             event = eventRecordRepository.create();
             // todo: 去除魔法数字
-            event.init(eventPayload, svcName, LocalDateTime.now(), Duration.ofMinutes(15), 13);
+            event.init(eventPayload, svcName, LocalDateTime.now(), Duration.ofDays(1), 30);
             event.beginDelivery(LocalDateTime.now());
             eventRecordRepository.save(event);
         }
