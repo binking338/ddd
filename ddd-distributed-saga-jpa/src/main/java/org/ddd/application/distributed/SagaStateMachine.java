@@ -62,14 +62,14 @@ public abstract class SagaStateMachine<Context> {
         SagaWrapper sagaWrapper = new SagaWrapper();
         sagaWrapper.setSaga(saga);
         sagaWrapper.saveAndFlush(sagaJpaRepository);
-        saga.holdState4Running(now, nextTryTime);
+        saga.holdState4Run(now, nextTryTime);
         return sagaWrapper.getSaga();
     }
 
     public Saga holdState4Run(Saga saga, LocalDateTime time) {
         LocalDateTime now = time;
         LocalDateTime nextTryTime = getNextTryTime(now, saga.getTriedTimes());
-        saga.holdState4Running(now, nextTryTime);
+        saga.holdState4Run(now, nextTryTime);
         SagaWrapper sagaWrapper = new SagaWrapper();
         sagaWrapper.setSaga(saga);
         sagaWrapper.saveAndFlush(sagaJpaRepository);
@@ -82,7 +82,7 @@ public abstract class SagaStateMachine<Context> {
             SagaWrapper sagaWrapper = new SagaWrapper();
             sagaWrapper.setSaga(saga);
             configProcess((Context) saga.getContext(), sagaWrapper);
-            sagaWrapper.getSaga().finishRunning();
+            sagaWrapper.getSaga().finishRun();
             if (sagaWrapper.getSaga().isFailed()) {
                 return rollback(holdState4Rollback(sagaWrapper.getSaga(), LocalDateTime.now()));
             }

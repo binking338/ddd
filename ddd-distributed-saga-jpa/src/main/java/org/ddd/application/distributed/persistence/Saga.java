@@ -70,7 +70,7 @@ public class Saga {
         return SagaState.DONE.equals(this.sagaState);
     }
 
-    public boolean holdState4Running(LocalDateTime now, LocalDateTime nextTryTime) {
+    public boolean holdState4Run(LocalDateTime now, LocalDateTime nextTryTime) {
         // 超过重试次数
         if (triedTimes >= tryTimes) {
             this.sagaState = SagaState.FAILED;
@@ -97,7 +97,7 @@ public class Saga {
         return true;
     }
 
-    public void finishRunning() {
+    public void finishRun() {
         if (this.processes != null && !this.processes.isEmpty()
                 && this.processes.stream().allMatch(p -> SagaState.DONE.equals(p.getProcessState()))) {
             done();
