@@ -6,4 +6,8 @@ package org.ddd.domain.repo;
  */
 public abstract class AbstractJpaPersistListener<Entity> implements PersistListener<Entity> {
     public abstract Class<Entity> forEntityClass();
+
+    public boolean throwOnException() {
+        return true;
+    }
 }

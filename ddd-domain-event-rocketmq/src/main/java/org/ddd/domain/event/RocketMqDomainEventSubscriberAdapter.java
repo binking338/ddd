@@ -108,7 +108,7 @@ public class RocketMqDomainEventSubscriberAdapter {
 
         DefaultMQPushConsumer mqPushConsumer = new DefaultMQPushConsumer();
         mqPushConsumer.setConsumerGroup(getTopicConsumerGroup(topic, domainEvent.subscriber()));
-        mqPushConsumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+        mqPushConsumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
         mqPushConsumer.setInstanceName(applicationName);
         String nameServerAddr = getTopicNamesrvAddr(topic, defaultNameSrv);
         mqPushConsumer.setNamesrvAddr(nameServerAddr);

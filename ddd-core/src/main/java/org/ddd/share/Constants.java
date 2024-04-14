@@ -1,7 +1,5 @@
 package org.ddd.share;
 
-import org.springframework.beans.factory.annotation.Value;
-
 /**
  * @author qiaohe
  * @date 2023/11/2
@@ -27,30 +25,4 @@ public class Constants {
     public static final String CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_MAXLOCKSECONDS = "${ddd.distributed.event.schedule.archive.maxLockSeconds:172800}";
     public static final String CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_CRON =  "${ddd.distributed.event.schedule.archive.cron:0 0 2 * * ?}";
     public static final String CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ADDPARTITION_CRON = "${ddd.domain.event.schedule.addpartition.cron:0 0 0 * * ?}";
-
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_THREADPOOLSIIZE = "${ddd.distributed.task.schedule.threadPoolSize:4}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_BATCHSIZE = "${ddd.distributed.task.schedule.batchSize:10}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_MAXCONCURRENT = "${ddd.distributed.task.schedule.maxConcurrency:10}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_INTERVALSECONDS = "${ddd.distributed.task.schedule.intervalSeconds:60}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_MAXLOCKSECONDS = "${ddd.distributed.task.schedule.maxLockSeconds:300}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_CRON = "${ddd.distributed.task.schedule.cron:0 */1 * * * ?}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_BATCHSIZE =  "${ddd.distributed.task.schedule.archive.batchSize:100}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_EXPIREDAYS = "${ddd.distributed.task.schedule.archive.expireDays:7}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_MAXLOCKSECONDS = "${ddd.distributed.task.schedule.archive.maxLockSeconds:172800}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ARCHIVE_CRON =  "${ddd.distributed.task.schedule.archive.cron:0 0 2 * * ?}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_TASK_SCHEDULE_ADDPARTITION_CRON =  "${ddd.distributed.task.schedule.addpartition.cron:0 0 0 * * ?}";
-
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_THREADPOOLSIIZE = "${ddd.distributed.saga.schedule.threadPoolSize:4}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_BATCHSIZE = "${ddd.distributed.saga.schedule.batchSize:10}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_MAXCONCURRENT = "${ddd.distributed.saga.schedule.maxConcurrency:10}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_INTERVALSECONDS = "${ddd.distributed.saga.schedule.intervalSeconds:60}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_MAXLOCKSECONDS = "${ddd.distributed.saga.schedule.maxLockSeconds:300}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_COMPENSATION_CRON =  "${ddd.distributed.saga.schedule.cron:0 */1 * * * ?}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ROLLBACK_CRON =  "${ddd.distributed.saga.schedule.rollback.cron:0 */1 * * * ?}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_BATCHSIZE =  "${ddd.distributed.saga.schedule.archive.batchSize:100}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_EXPIREDAYS = "${ddd.distributed.saga.schedule.archive.expireDays:7}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_MAXLOCKSECONDS = "${ddd.distributed.saga.schedule.archive.maxLockSeconds:172800}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ARCHIVE_CRON =  "${ddd.distributed.saga.schedule.archive.cron:0 0 2 * * ?}";
-    public static final String CONFIG_KEY_4_DISTRIBUTED_SAGA_SCHEDULE_ADDPARTITION_CRON =  "${ddd.distributed.saga.schedule.addpartition.cron:0 0 0 * * ?}";
-
 }

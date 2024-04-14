@@ -28,6 +28,8 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
     private final EventRecordRepository eventRecordRepository;
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName;
+    private Duration defaultExpireAfter = Duration.ofDays(1);
+    private int defaultRetryTimes = 30;
 
     @Autowired
     Environment environment;
@@ -60,8 +62,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             event = (EventRecord) eventPayload;
         } else {
             event = eventRecordRepository.create();
-            // todo: 去除魔法数字
-            event.init(eventPayload, svcName, LocalDateTime.now(), Duration.ofDays(1), 30);
+            event.init(eventPayload, svcName, LocalDateTime.now(), defaultExpireAfter, defaultRetryTimes);
             event.beginDelivery(LocalDateTime.now());
             eventRecordRepository.save(event);
         }
@@ -69,10 +70,12 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             String destination = event.getEventType();
             destination = environment.resolvePlaceholders(destination);
             if (destination != null && !destination.isEmpty()) {
+                // MQ消息
                 rocketMQTemplate.asyncSend(destination, event.getPayload(), new DomainEventSendCallback(event, eventRecordRepository));
             } else {
+                // 进程内消息
                 rocketMqDomainEventSubscriberManager.trigger(event.getPayload());
-                event.confirmedDelivered(LocalDateTime.now());
+                event.confirmDelivered(LocalDateTime.now());
                 eventRecordRepository.save(event);
             }
         } catch (Exception ex) {
@@ -93,11 +96,11 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         public void onSuccess(SendResult sendResult) {
             // 修改事件消费状态
             if (event == null) {
-                throw new DomainException(String.format("集成事件不存在 event = %s", event.toString()));
+                throw new DomainException("集成事件为NULL");
             }
             try {
                 LocalDateTime now = LocalDateTime.now();
-                event.confirmedDelivered(now);
+                event.confirmDelivered(now);
                 eventRecordRepository.save(event);
                 log.info(String.format("集成事件发送成功, destination=%s, body=%s", event.getEventType(), JSON.toJSONString(event.getPayload())));
             } catch (Exception ex) {
@@ -108,7 +111,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         @Override
         public void onException(Throwable throwable) {
             if (event == null) {
-                throw new DomainException(String.format("集成事件不存在 event = %s", event.toString()));
+                throw new DomainException("集成事件为NULL");
             }
             try {
                 log.error(String.format("集成事件发送失败, destination=%s, body=%s", event.getEventType(), JSON.toJSONString(event.getPayload())), throwable);

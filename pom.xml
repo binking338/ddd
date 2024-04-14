@@ -15,12 +15,7 @@
         <module>ddd-domain-event-rocketmq-jpa</module>
         <module>ddd-domain-repo-jpa</module>
         <module>ddd-distributed-locker-jdbc</module>
-        <module>ddd-distributed-saga-jpa</module>
-        <module>ddd-distributed-task</module>
-        <module>ddd-distributed-task-jpa</module>
         <module>starter/ddd-domain-starter-jpa-rocketmq</module>
-        <module>starter/ddd-distributed-starter-jpa</module>
-        <module>starter/ddd-distributed-saga-starter-jpa</module>
         <module>example/ddd-mvc-example</module>
         <module>ddd-application-query-jdbc</module>
     </modules>

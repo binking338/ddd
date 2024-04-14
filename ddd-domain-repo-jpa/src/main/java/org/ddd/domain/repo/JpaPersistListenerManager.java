@@ -22,9 +22,8 @@ public class JpaPersistListenerManager implements PersistListenerManager {
     private void init() {
         if (persistListenersMap == null) {
             synchronized (this) {
-                persistListenersMap = new HashMap<>();
                 if (persistListenersMap == null) {
-                    persistListenersMap = new java.util.HashMap<Class, List<AbstractJpaPersistListener>>();
+                    persistListenersMap = new HashMap<>();
                     persistListeners.sort((a, b) ->
                             a.getClass().getAnnotation(Order.class).value() - b.getClass().getAnnotation(Order.class).value()
                     );
@@ -56,6 +55,9 @@ public class JpaPersistListenerManager implements PersistListenerManager {
                     listener.onPersist(entity);
                 } catch (Exception ex){
                     log.error("onPersist 异常", ex);
+                    if(listener.throwOnException()){
+                        throw ex;
+                    }
                 }
             }
         }
@@ -72,6 +74,9 @@ public class JpaPersistListenerManager implements PersistListenerManager {
                     listener.onCreate(entity);
                 } catch (Exception ex){
                     log.error("onCreate 异常", ex);
+                    if(listener.throwOnException()){
+                        throw ex;
+                    }
                 }
             }
         }
@@ -88,6 +93,9 @@ public class JpaPersistListenerManager implements PersistListenerManager {
                     listener.onUpdate(entity);
                 } catch (Exception ex){
                     log.error("onUpdate 异常", ex);
+                    if(listener.throwOnException()){
+                        throw ex;
+                    }
                 }
             }
         }
@@ -105,6 +113,9 @@ public class JpaPersistListenerManager implements PersistListenerManager {
                     listener.onDelete(entity);
                 } catch (Exception ex){
                     log.error("onDelete 异常", ex);
+                    if(listener.throwOnException()){
+                        throw ex;
+                    }
                 }
             }
         }

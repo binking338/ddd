@@ -37,28 +37,28 @@ import static org.ddd.share.Constants.CONFIG_KEY_4_SVC_NAME;
 @RequiredArgsConstructor
 @Slf4j
 public class JpaEventScheduleService {
-    private static final String KEY_COMPENSATION_LOCKER = "event_compensation[" + CONFIG_KEY_4_SVC_NAME + "]";
+    private static final String KEY_COMPENSATION_LOCKER = "event_compense[" + CONFIG_KEY_4_SVC_NAME + "]";
     private static final String KEY_ARCHIVE_LOCKER = "event_archive[" + CONFIG_KEY_4_SVC_NAME + "]";
 
     private final Locker locker;
     private final DomainEventPublisher domainEventPublisher;
-    private final EventJpaRepository eventJpaRepository;
+    private final EventRepository eventRepository;
     private final ArchivedEventJpaRepository archivedEventJpaRepository;
 
     @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_THREADPOOLSIIZE)
     private int threadPoolsize;
     private ThreadPoolExecutor executor = null;
 
-    @PostConstruct
-    public void init() {
-        executor = new ThreadPoolExecutor(threadPoolsize, threadPoolsize, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
-    }
-
     @Value(CONFIG_KEY_4_SVC_NAME)
     private String svcName = null;
 
     private String getSvcName() {
         return svcName;
+    }
+
+    @PostConstruct
+    public void init() {
+        executor = new ThreadPoolExecutor(threadPoolsize, threadPoolsize, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
     }
 
     @Value(KEY_COMPENSATION_LOCKER)
@@ -70,7 +70,7 @@ public class JpaEventScheduleService {
 
     private boolean compensationRunning = false;
 
-    public void compensation(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
+    public void compense(int batchSize, int maxConcurrency, Duration interval, Duration maxLockDuration) {
         if (compensationRunning) {
             log.info("事件发送补偿:上次事件发送补偿仍未结束，跳过");
             return;
@@ -88,7 +88,7 @@ public class JpaEventScheduleService {
                     if (!locker.acquire(lockerKey, pwd, maxLockDuration)) {
                         return;
                     }
-                    Page<Event> events = eventJpaRepository.findAll((root, cq, cb) -> {
+                    Page<Event> events = eventRepository.findAll((root, cq, cb) -> {
                         cq.where(cb.or(
                                 cb.and(
                                         // 【初始状态】
@@ -97,7 +97,7 @@ public class JpaEventScheduleService {
                                         cb.equal(root.get(Event.F_SVC_NAME), svcName)
                                 ), cb.and(
                                         // 【未知状态】
-                                        cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.COMFIRMING),
+                                        cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.DELIVERING),
                                         cb.lessThan(root.get(Event.F_NEXT_TRY_TIME), now.plusSeconds(0)),
                                         cb.equal(root.get(Event.F_SVC_NAME), svcName)
                                 )));
@@ -110,8 +110,8 @@ public class JpaEventScheduleService {
                     for (Event event : events.getContent()) {
                         log.info("事件发送补偿: {}", event.toString());
                         event.holdState4Delivery(now);
-                        event = eventJpaRepository.saveAndFlush(event);
-                        if(event.isConfirming(now)) {
+                        event = eventRepository.saveAndFlush(event);
+                        if(event.isDelivering(now)) {
                             EventRecordImpl eventRecordImpl = new EventRecordImpl();
                             eventRecordImpl.resume(event);
                             executor.submit(() -> domainEventPublisher.publish(eventRecordImpl));
@@ -125,16 +125,6 @@ public class JpaEventScheduleService {
             }
         } finally {
             compensationRunning = false;
-        }
-    }
-
-    private void trySleep(long mills) {
-        try {
-            if (mills > 0) {
-                Thread.sleep(mills);
-            }
-        } catch (InterruptedException e) {
-            /* ignore */
         }
     }
 
@@ -162,7 +152,7 @@ public class JpaEventScheduleService {
         int failCount = 0;
         while (true) {
             try {
-                Page<Event> events = eventJpaRepository.findAll((root, cq, cb) -> {
+                Page<Event> events = eventRepository.findAll((root, cq, cb) -> {
                     cq.where(
                             cb.and(
                                     // 【状态】
@@ -172,7 +162,8 @@ public class JpaEventScheduleService {
                                             cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.FAILED),
                                             cb.equal(root.get(Event.F_EVENT_STATE), Event.EventState.DELIVERED)
                                     ),
-                                    cb.lessThan(root.get(Event.F_EXPIRE_AT), DateUtils.addDays(now, -7))
+                                    cb.lessThan(root.get(Event.F_EXPIRE_AT), DateUtils.addDays(now, expireDays)),
+                                    cb.equal(root.get(Event.F_SVC_NAME), svcName)
                             ));
                     return null;
                 }, PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, Event.F_CREATE_AT)));
@@ -181,16 +172,18 @@ public class JpaEventScheduleService {
                 }
                 List<ArchivedEvent> archivedEvents = events.stream().map(e -> ArchivedEvent.builder()
                         .id(e.getId())
-                        .dataType(e.getDataType())
-                        .data(e.getData())
+                        .eventUuid(e.getEventUuid())
+                        .svcName(e.getSvcName())
                         .eventType(e.getEventType())
-                        .eventState(e.getEventState())
+                        .data(e.getData())
+                        .dataType(e.getDataType())
                         .createAt(e.getCreateAt())
                         .expireAt(e.getExpireAt())
-                        .nextTryTime(e.getNextTryTime())
-                        .lastTryTime(e.getLastTryTime())
+                        .eventState(e.getEventState())
                         .tryTimes(e.getTryTimes())
                         .triedTimes(e.getTriedTimes())
+                        .lastTryTime(e.getLastTryTime())
+                        .nextTryTime(e.getNextTryTime())
                         .version(e.getVersion())
                         .build()
                 ).collect(Collectors.toList());
@@ -199,7 +192,7 @@ public class JpaEventScheduleService {
                 failCount++;
                 log.error("事件归档:失败", ex);
                 if (failCount >= 3) {
-                    log.info("事件归档:累计3次退出任务");
+                    log.info("事件归档:累计3次异常退出任务");
                     break;
                 }
             }
@@ -210,7 +203,7 @@ public class JpaEventScheduleService {
     @Transactional
     public void migrate(List<Event> events, List<ArchivedEvent> archivedEvents) {
         archivedEventJpaRepository.saveAll(archivedEvents);
-        eventJpaRepository.deleteInBatch(events);
+        eventRepository.deleteInBatch(events);
     }
 
     public void addPartition() {

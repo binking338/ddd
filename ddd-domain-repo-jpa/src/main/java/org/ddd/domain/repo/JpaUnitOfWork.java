@@ -115,7 +115,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                         if (!getEntityManager().contains(entity)) {
                             getEntityManager().merge(entity);
                         }
-                        entityPersisttedEventThreadLocal.get().getCreatedEntities().add(entity);
+                        entityPersisttedEventThreadLocal.get().getUpdatedEntities().add(entity);
                     } else {
                         if (!getEntityManager().contains(entity)) {
                             getEntityManager().persist(entity);
@@ -124,7 +124,7 @@ public class JpaUnitOfWork implements UnitOfWork {
                             }
                             refreshEntityList.add(entity);
                         }
-                        entityPersisttedEventThreadLocal.get().getUpdatedEntities().add(entity);
+                        entityPersisttedEventThreadLocal.get().getCreatedEntities().add(entity);
                     }
                 }
             }

@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.ddd.application.distributed.Locker;
 import org.ddd.domain.event.persistence.ArchivedEventJpaRepository;
-import org.ddd.domain.event.persistence.EventJpaRepository;
+import org.ddd.domain.event.persistence.EventRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,7 +34,7 @@ import static org.ddd.share.Constants.*;
 @EnableScheduling
 public class RocketMqEventAutoConfiguration {
     private final Locker locker;
-    private final EventJpaRepository eventJpaRepository;
+    private final EventRepository eventRepository;
     private final ArchivedEventJpaRepository archivedEventJpaRepository;
     private final RocketMQTemplate rocketMQTemplate;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -44,7 +44,7 @@ public class RocketMqEventAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(EventRecordRepository.class)
     public JpaEventRecordRepository jpaEventRecordRepository() {
-        JpaEventRecordRepository eventRecordRepository = new JpaEventRecordRepository(eventJpaRepository);
+        JpaEventRecordRepository eventRecordRepository = new JpaEventRecordRepository(eventRepository);
         return eventRecordRepository;
     }
 
@@ -74,7 +74,7 @@ public class RocketMqEventAutoConfiguration {
 
     @Bean
     public JpaEventScheduleService eventScheduleService(DomainEventPublisher domainEventPublisher) {
-        scheduleService = new JpaEventScheduleService(locker, domainEventPublisher, eventJpaRepository, archivedEventJpaRepository, jdbcTemplate);
+        scheduleService = new JpaEventScheduleService(locker, domainEventPublisher, eventRepository, archivedEventJpaRepository, jdbcTemplate);
         scheduleService.addPartition();
         return scheduleService;
     }
@@ -92,7 +92,7 @@ public class RocketMqEventAutoConfiguration {
     @Scheduled(cron = CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_CRON)
     public void compensation() {
         if (scheduleService == null) return;
-        scheduleService.compensation(batchSize, maxConcurrency, Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(maxLockSeconds));
+        scheduleService.compense(batchSize, maxConcurrency, Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(maxLockSeconds));
     }
 
     @Value(CONFIG_KEY_4_DISTRIBUTED_EVENT_SCHEDULE_ARCHIVE_BATCHSIZE)

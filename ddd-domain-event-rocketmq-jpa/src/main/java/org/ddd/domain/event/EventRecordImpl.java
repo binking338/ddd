@@ -1,7 +1,8 @@
-package org.ddd.domain.event.persistence;
+package org.ddd.domain.event;
 
 import lombok.extern.slf4j.Slf4j;
 import org.ddd.domain.event.EventRecord;
+import org.ddd.domain.event.persistence.Event;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -38,16 +39,6 @@ public class EventRecordImpl implements EventRecord {
     }
 
     @Override
-    public boolean beginDelivery(LocalDateTime now) {
-        return event.holdState4Delivery(now);
-    }
-
-    @Override
-    public void confirmedDelivered(LocalDateTime now) {
-        event.confirmedDelivered(now);
-    }
-
-    @Override
     public String getEventType() {
         return event.getEventType();
     }
@@ -55,5 +46,15 @@ public class EventRecordImpl implements EventRecord {
     @Override
     public Object getPayload() {
         return event.getPayload();
+    }
+
+    @Override
+    public boolean beginDelivery(LocalDateTime now) {
+        return event.holdState4Delivery(now);
+    }
+
+    @Override
+    public void confirmDelivered(LocalDateTime now) {
+        event.confirmDelivered(now);
     }
 }

@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.ddd.domain.event.annotation.DomainEvent;
+import org.ddd.share.DomainException;
 import org.ddd.share.annotation.Retry;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -80,27 +81,8 @@ public class Event {
         return this.payload;
     }
 
-    private void loadPayload(Object payload) {
-        this.payload = payload;
-        this.data = JSON.toJSONString(payload);
-        this.dataType = payload.getClass().getName();
-        DomainEvent domainEvent = payload == null
-                ? null
-                : payload.getClass().getAnnotation(DomainEvent.class);
-        if (domainEvent != null) {
-            this.eventType = domainEvent.value();
-        }
-        Retry retry = payload == null
-                ? null
-                : payload.getClass().getAnnotation(Retry.class);
-        if (retry != null) {
-            this.tryTimes = retry.retryTimes();
-            this.expireAt = this.createAt.plusMinutes(retry.expireAfter());
-        }
-    }
-
-    public boolean isConfirming(LocalDateTime now) {
-        return EventState.COMFIRMING.equals(this.eventState)
+    public boolean isDelivering(LocalDateTime now) {
+        return EventState.DELIVERING.equals(this.eventState)
                 && now.isBefore(this.nextTryTime);
     }
 
@@ -117,18 +99,48 @@ public class Event {
         }
         // 初始状态或者确认中状态
         if (!EventState.INIT.equals(this.eventState)
-                && !EventState.COMFIRMING.equals(this.eventState)) {
+                && !EventState.DELIVERING.equals(this.eventState)) {
             return false;
         }
         // 未到下次重试时间
         if (this.nextTryTime != null && this.nextTryTime.isAfter(now)) {
             return false;
         }
-        this.eventState = EventState.COMFIRMING;
+        this.eventState = EventState.DELIVERING;
         this.lastTryTime = now;
         this.nextTryTime = calculateNextTryTime(now);
         this.triedTimes++;
         return true;
+    }
+
+    public void confirmDelivered(LocalDateTime now) {
+        this.eventState = EventState.DELIVERED;
+    }
+
+    public void cancel(LocalDateTime now) {
+        this.eventState = EventState.CANCEL;
+    }
+
+    private void loadPayload(Object payload) {
+        if(payload == null){
+            throw new DomainException("事件体不能为null");
+        }
+        this.payload = payload;
+        this.data = JSON.toJSONString(payload);
+        this.dataType = payload.getClass().getName();
+        DomainEvent domainEvent = payload == null
+                ? null
+                : payload.getClass().getAnnotation(DomainEvent.class);
+        if (domainEvent != null) {
+            this.eventType = domainEvent.value();
+        }
+        Retry retry = payload == null
+                ? null
+                : payload.getClass().getAnnotation(Retry.class);
+        if (retry != null) {
+            this.tryTimes = retry.retryTimes();
+            this.expireAt = this.createAt.plusMinutes(retry.expireAfter());
+        }
     }
 
     private LocalDateTime calculateNextTryTime(LocalDateTime now) {
@@ -151,14 +163,6 @@ public class Event {
             index = 0;
         }
         return now.plusMinutes(retry.retryIntervals()[index]);
-    }
-
-    public void confirmedDelivered(LocalDateTime now) {
-        this.eventState = EventState.DELIVERED;
-    }
-
-    public void cancel(LocalDateTime now) {
-        this.eventState = EventState.CANCEL;
     }
 
     @Override
@@ -287,7 +291,7 @@ public class Event {
         /**
          * 待确认发送结果
          */
-        COMFIRMING(-1, "comfirming"),
+        DELIVERING(-1, "delivering"),
         /**
          * 业务主动取消
          */

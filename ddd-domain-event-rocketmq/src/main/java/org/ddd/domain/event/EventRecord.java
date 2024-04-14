@@ -19,19 +19,6 @@ public interface EventRecord {
     void init(Object payload, String svcName, LocalDateTime now, Duration expireAfter, int retryTimes);
 
     /**
-     * 开始发送事件
-     * @param now
-     * @return
-     */
-    boolean beginDelivery(LocalDateTime now);
-
-    /**
-     * 确认时间已发出
-     * @param now
-     */
-    void confirmedDelivered(LocalDateTime now);
-
-    /**
      * 获取事件类型
      * @return
      */
@@ -42,4 +29,17 @@ public interface EventRecord {
      * @return
      */
     Object getPayload();
+
+    /**
+     * 开始发送事件
+     * @param now
+     * @return
+     */
+    boolean beginDelivery(LocalDateTime now);
+
+    /**
+     * 确认时间已发出
+     * @param now
+     */
+    void confirmDelivered(LocalDateTime now);
 }
