@@ -40,4 +40,11 @@ public interface Repository<Entity> {
      * @return
      */
     long count(Object condition);
+
+    /**
+     * 根据条件判断实体是否存在
+     * @param condition
+     * @return
+     */
+    boolean exists(Object condition);
 }

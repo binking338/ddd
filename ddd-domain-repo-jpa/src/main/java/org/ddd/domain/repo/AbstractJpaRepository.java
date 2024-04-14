@@ -45,6 +45,11 @@ public abstract class AbstractJpaRepository<Entity, ID> implements Repository<En
         return result;
     }
 
+    public boolean exists(Object condition) {
+        boolean result = jpaSpecificationExecutor.exists((org.springframework.data.jpa.domain.Specification<Entity>) condition);
+        return result;
+    }
+
     private Sort convertSort(List<ListOrder> orders) {
         Sort sort = Sort.unsorted();
         if (orders != null && !orders.isEmpty()) {
