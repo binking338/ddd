@@ -40,6 +40,11 @@ public abstract class AbstractJpaRepository<Entity, ID> implements Repository<En
         return convertPageData(page);
     }
 
+    public long count(Object condition) {
+        long result = jpaSpecificationExecutor.count((org.springframework.data.jpa.domain.Specification<Entity>) condition);
+        return result;
+    }
+
     private Sort convertSort(List<ListOrder> orders) {
         Sort sort = Sort.unsorted();
         if (orders != null && !orders.isEmpty()) {

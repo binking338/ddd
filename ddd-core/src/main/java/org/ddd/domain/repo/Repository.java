@@ -33,4 +33,11 @@ public interface Repository<Entity> {
      * @return
      */
     PageData<Entity> pageBy(Object condition, PageParam pageParam);
+
+    /**
+     * 根据条件获取实体计数
+     * @param condition
+     * @return
+     */
+    long count(Object condition);
 }
