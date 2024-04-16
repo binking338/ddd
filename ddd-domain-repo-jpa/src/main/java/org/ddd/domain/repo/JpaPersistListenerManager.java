@@ -40,7 +40,7 @@ public class JpaPersistListenerManager implements PersistListenerManager {
     }
 
     /**
-     * onCreate & onUpdate
+     * onCreate & onUpdate & onDelete
      * @param entity
      * @param <Entity>
      */

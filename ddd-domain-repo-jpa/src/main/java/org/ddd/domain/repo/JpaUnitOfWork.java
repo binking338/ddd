@@ -523,6 +523,7 @@ public class JpaUnitOfWork implements UnitOfWork {
             jpaPersistListenerManager.onUpdate(entity);
         }
         for (Object entity : event.getDeletedEntities()) {
+            jpaPersistListenerManager.onPersist(entity);
             jpaPersistListenerManager.onDelete(entity);
         }
     }
