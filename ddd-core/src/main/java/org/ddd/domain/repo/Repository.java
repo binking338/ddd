@@ -13,6 +13,27 @@ import java.util.Optional;
  * @date 2023/8/12
  */
 public interface Repository<Entity> {
+
+    /**
+     * 通过ID判断实体是否存在
+     * @param id
+     * @return
+     */
+    boolean existsById(Object id);
+    /**
+     * 通过ID获取实体
+     * @param id
+     * @return
+     */
+    Optional<Entity> getById(Object id);
+
+    /**
+     * 通过ID获取实体
+     * @param ids
+     * @return
+     */
+    List<Entity> listByIds(Iterable<Object> ids);
+
     /**
      * 根据条件获取实体
      * @param condition

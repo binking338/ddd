@@ -45,14 +45,14 @@ public class JpaPersistListenerManager implements PersistListenerManager {
      * @param <Entity>
      */
     @Override
-    public <Entity> void onPersist(Entity entity) {
+    public <Entity> void onChange(Entity entity) {
         init();
         List<AbstractJpaPersistListener> listeners = persistListenersMap.get(entity.getClass());
         if (listeners != null) {
             for (AbstractJpaPersistListener listener :
                     listeners) {
                 try {
-                    listener.onPersist(entity);
+                    listener.onChange(entity);
                 } catch (Exception ex){
                     log.error("onPersist 异常", ex);
                     if(listener.throwOnException()){

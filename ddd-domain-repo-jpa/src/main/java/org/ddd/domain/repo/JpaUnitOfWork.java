@@ -515,15 +515,15 @@ public class JpaUnitOfWork implements UnitOfWork {
     @TransactionalEventListener(fallbackExecution = true, classes = EntityPersisttedEvent.class)
     public void onTransactionCommitted(EntityPersisttedEvent event){
         for (Object entity : event.getCreatedEntities()) {
-            jpaPersistListenerManager.onPersist(entity);
+            jpaPersistListenerManager.onChange(entity);
             jpaPersistListenerManager.onCreate(entity);
         }
         for (Object entity : event.getUpdatedEntities()) {
-            jpaPersistListenerManager.onPersist(entity);
+            jpaPersistListenerManager.onChange(entity);
             jpaPersistListenerManager.onUpdate(entity);
         }
         for (Object entity : event.getDeletedEntities()) {
-            jpaPersistListenerManager.onPersist(entity);
+            jpaPersistListenerManager.onChange(entity);
             jpaPersistListenerManager.onDelete(entity);
         }
     }

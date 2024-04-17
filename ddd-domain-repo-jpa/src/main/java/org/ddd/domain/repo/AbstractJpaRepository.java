@@ -8,8 +8,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import javax.persistence.EntityNotFoundException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -21,6 +24,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public abstract class AbstractJpaRepository<Entity, ID> implements Repository<Entity> {
     private final JpaSpecificationExecutor<Entity> jpaSpecificationExecutor;
+    private final JpaRepository<Entity, ID> jpaRepository;
+
+    public Optional<Entity> getById(Object id) {
+        List<ID> ids = new ArrayList<>(1);
+        ids.add((ID) id);
+        Optional<Entity> entity = jpaRepository.findAllById(ids).stream().findFirst();
+        return entity;
+    }
+
+    public List<Entity> listByIds(Iterable<Object> ids){
+        List<Entity> entities = jpaRepository.findAllById((Iterable<ID>) ids);
+        return entities;
+    }
+
+    public boolean existsById(Object id) {
+        return jpaRepository.existsById((ID) id);
+    }
 
     public Optional<Entity> getBy(Object condition) {
         return jpaSpecificationExecutor.findOne((org.springframework.data.jpa.domain.Specification<Entity>) condition);

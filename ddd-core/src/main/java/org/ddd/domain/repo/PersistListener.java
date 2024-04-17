@@ -6,7 +6,11 @@ package org.ddd.domain.repo;
  */
 public interface PersistListener<Entity> {
 
-    void onPersist(Entity entity);
+    /**
+     * 持久化变更
+     * @param entity
+     */
+    void onChange(Entity entity);
 
     /**
      * 新增实体时

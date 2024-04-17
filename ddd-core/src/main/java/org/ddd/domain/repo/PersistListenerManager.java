@@ -5,7 +5,7 @@ package org.ddd.domain.repo;
  * @date 2024/1/31
  */
 public interface PersistListenerManager {
-    <Entity> void onPersist(Entity entity);
+    <Entity> void onChange(Entity entity);
 
     <Entity> void onCreate(Entity entity);
 
