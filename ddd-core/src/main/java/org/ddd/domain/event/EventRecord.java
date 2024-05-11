@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
+ * 事件记录
  * @author qiaohe
  * @date 2023/9/9
  */
@@ -19,10 +20,10 @@ public interface EventRecord {
     void init(Object payload, String svcName, LocalDateTime now, Duration expireAfter, int retryTimes);
 
     /**
-     * 获取事件类型
+     * 获取事件主题
      * @return
      */
-    String getEventType();
+    String getEventTopic();
 
     /**
      * 获取事件消息体

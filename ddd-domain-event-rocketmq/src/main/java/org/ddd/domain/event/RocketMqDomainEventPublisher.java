@@ -67,7 +67,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
             eventRecordRepository.save(event);
         }
         try {
-            String destination = event.getEventType();
+            String destination = event.getEventTopic();
             destination = environment.resolvePlaceholders(destination);
             if (destination != null && !destination.isEmpty()) {
                 // MQ消息
@@ -102,7 +102,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
                 LocalDateTime now = LocalDateTime.now();
                 event.confirmDelivered(now);
                 eventRecordRepository.save(event);
-                log.info(String.format("集成事件发送成功, destination=%s, body=%s", event.getEventType(), JSON.toJSONString(event.getPayload())));
+                log.info(String.format("集成事件发送成功, destination=%s, body=%s", event.getEventTopic(), JSON.toJSONString(event.getPayload())));
             } catch (Exception ex) {
                 log.error("本地事件库持久化失败", ex);
             }
@@ -114,7 +114,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
                 throw new DomainException("集成事件为NULL");
             }
             try {
-                log.error(String.format("集成事件发送失败, destination=%s, body=%s", event.getEventType(), JSON.toJSONString(event.getPayload())), throwable);
+                log.error(String.format("集成事件发送失败, destination=%s, body=%s", event.getEventTopic(), JSON.toJSONString(event.getPayload())), throwable);
             } catch (Exception ex) {
                 log.error("本地事件库持久化失败", ex);
             }
