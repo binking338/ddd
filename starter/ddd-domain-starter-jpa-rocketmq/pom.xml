@@ -30,7 +30,12 @@
         </dependency>
         <dependency>
             <groupId>org.ddd</groupId>
-            <artifactId>ddd-domain-event-rocketmq-jpa</artifactId>
+            <artifactId>ddd-domain-event-rocketmq</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.ddd</groupId>
+            <artifactId>ddd-domain-event-jpa</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>

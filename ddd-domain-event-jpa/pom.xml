@@ -7,7 +7,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>ddd-domain-event-rocketmq-jpa</artifactId>
+    <artifactId>ddd-domain-event-jpa</artifactId>
     <packaging>jar</packaging>
 
     <name>ddd-domain-event-rocketmq-jpa</name>
@@ -15,8 +15,16 @@
     <dependencies>
         <dependency>
             <groupId>org.ddd</groupId>
-            <artifactId>ddd-domain-event-rocketmq</artifactId>
+            <artifactId>ddd-core</artifactId>
             <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
         </dependency>
         <!-- JPA -->
         <dependency>
